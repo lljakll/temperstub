@@ -1,0 +1,2 @@
+set(__QT_DEPLOY_TARGET_TemperStub_FILE /home/jak/git_repos/TemperStub/build/TemperStub)
+set(__QT_DEPLOY_TARGET_TemperStub_TYPE EXECUTABLE)

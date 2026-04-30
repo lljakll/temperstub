@@ -1,0 +1,5 @@
+/home/jak/git_repos/TemperStub/build/CMakeFiles/TemperStub.dir
+/home/jak/git_repos/TemperStub/build/CMakeFiles/edit_cache.dir
+/home/jak/git_repos/TemperStub/build/CMakeFiles/rebuild_cache.dir
+/home/jak/git_repos/TemperStub/build/CMakeFiles/TemperStub_autogen_timestamp_deps.dir
+/home/jak/git_repos/TemperStub/build/CMakeFiles/TemperStub_autogen.dir
