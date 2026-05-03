@@ -458,6 +458,8 @@ CMakeFiles/TemperStub.dir/src/mainwindow.cpp.o: \
  /usr/include/x86_64-linux-gnu/qt6/QtCore/qcalendar.h \
  /usr/include/x86_64-linux-gnu/qt6/QtCore/QList \
  /usr/include/x86_64-linux-gnu/qt6/QtCore/qlist.h \
+ /usr/include/x86_64-linux-gnu/qt6/QtGui/QStandardItemModel \
+ /usr/include/x86_64-linux-gnu/qt6/QtGui/qstandarditemmodel.h \
  /usr/include/x86_64-linux-gnu/qt6/QtWidgets/QVBoxLayout \
  /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qboxlayout.h \
  /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qlayout.h \
@@ -486,8 +488,6 @@ CMakeFiles/TemperStub.dir/src/mainwindow.cpp.o: \
  /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qmessagebox.h \
  /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qdialog.h \
  /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qdialogbuttonbox.h \
- /usr/include/x86_64-linux-gnu/qt6/QtGui/QStandardItemModel \
- /usr/include/x86_64-linux-gnu/qt6/QtGui/qstandarditemmodel.h \
  /usr/include/x86_64-linux-gnu/qt6/QtWidgets/QHeaderView \
  /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qheaderview.h \
  /usr/include/x86_64-linux-gnu/qt6/QtWidgets/QGroupBox \
@@ -501,17 +501,16 @@ CMakeFiles/TemperStub.dir/src/mainwindow.cpp.o: \
  /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qtableview.h \
  /usr/include/x86_64-linux-gnu/qt6/QtWidgets/QSplitter \
  /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qsplitter.h \
- /usr/include/x86_64-linux-gnu/qt6/QtWidgets/QApplication \
- /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qapplication.h \
- /usr/include/x86_64-linux-gnu/qt6/QtCore/qcoreapplication.h \
+ /usr/include/x86_64-linux-gnu/qt6/QtCore/QDebug \
+ /usr/include/x86_64-linux-gnu/qt6/QtCore/qdebug.h \
+ /usr/include/x86_64-linux-gnu/qt6/QtCore/QEvent \
  /usr/include/x86_64-linux-gnu/qt6/QtCore/qcoreevent.h \
  /usr/include/x86_64-linux-gnu/qt6/QtCore/qbasictimer.h \
  /usr/include/x86_64-linux-gnu/qt6/QtCore/qabstracteventdispatcher.h \
  /usr/include/x86_64-linux-gnu/qt6/QtCore/qeventloop.h \
  /usr/include/x86_64-linux-gnu/qt6/QtCore/qdeadlinetimer.h \
  /usr/include/x86_64-linux-gnu/qt6/QtCore/qelapsedtimer.h \
- /usr/include/x86_64-linux-gnu/qt6/QtCore/qnativeinterface.h \
- /usr/include/x86_64-linux-gnu/qt6/QtCore/qcoreapplication_platform.h \
- /usr/include/x86_64-linux-gnu/qt6/QtGui/qguiapplication.h \
- /usr/include/x86_64-linux-gnu/qt6/QtGui/qinputmethod.h \
- /usr/include/x86_64-linux-gnu/qt6/QtGui/qguiapplication_platform.h
+ /usr/include/x86_64-linux-gnu/qt6/QtWidgets/QCheckBox \
+ /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qcheckbox.h \
+ /usr/include/x86_64-linux-gnu/qt6/QtWidgets/QTextEdit \
+ /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qtextedit.h

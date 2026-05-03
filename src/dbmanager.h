@@ -25,6 +25,19 @@ struct Transaction {
     QDateTime createdAt;
 };
 
+struct Account {
+    int id;
+    QString code;
+    QString name;
+    QString type;
+    int fundId;
+};
+
+struct SimpleLookup {
+    int id;
+    QString name;
+};
+
 class DbManager : public QObject {
     Q_OBJECT
 public:
@@ -32,13 +45,18 @@ public:
     bool initDatabase();
     QList<Fund> getAllFunds() const;
     QList<Transaction> getAllTransactions() const;
+    QString generateNextTransactionId() const;    
     bool addTransaction(const Transaction& t);
     double getFundBalance(int fundId) const;
     double getWODRTotal() const;
     double getWDRTotal() const;
     QSqlDatabase db;
+    QList<Account> getAllAccounts() const;
+    QString getFundName(int fundId) const;
+    QList<SimpleLookup> getAllNaturalClasses() const;
+    QList<SimpleLookup> getAllFunctionalClasses() const;
 
 private:
     void createTables();
-    void seedInitialFunds(); // Guide §5.1
+    void seedDefaultLookups();
 };

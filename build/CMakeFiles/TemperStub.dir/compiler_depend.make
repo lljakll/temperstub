@@ -422,6 +422,7 @@ TemperStub_autogen/timestamp: /home/jak/git_repos/TemperStub/CMakeLists.txt \
   /usr/include/x86_64-linux-gnu/qt6/QtCore/qversiontagging.h \
   /usr/include/x86_64-linux-gnu/qt6/QtCore/qxptype_traits.h \
   /usr/include/x86_64-linux-gnu/qt6/QtCore/qyieldcpu.h \
+  /usr/include/x86_64-linux-gnu/qt6/QtGui/QStandardItemModel \
   /usr/include/x86_64-linux-gnu/qt6/QtGui/qaction.h \
   /usr/include/x86_64-linux-gnu/qt6/QtGui/qbitmap.h \
   /usr/include/x86_64-linux-gnu/qt6/QtGui/qbrush.h \
@@ -443,6 +444,7 @@ TemperStub_autogen/timestamp: /home/jak/git_repos/TemperStub/CMakeLists.txt \
   /usr/include/x86_64-linux-gnu/qt6/QtGui/qregion.h \
   /usr/include/x86_64-linux-gnu/qt6/QtGui/qrgb.h \
   /usr/include/x86_64-linux-gnu/qt6/QtGui/qrgba64.h \
+  /usr/include/x86_64-linux-gnu/qt6/QtGui/qstandarditemmodel.h \
   /usr/include/x86_64-linux-gnu/qt6/QtGui/qtextdocument.h \
   /usr/include/x86_64-linux-gnu/qt6/QtGui/qtgui-config.h \
   /usr/include/x86_64-linux-gnu/qt6/QtGui/qtguiexports.h \
@@ -799,8 +801,6 @@ TemperStub_autogen/timestamp: /home/jak/git_repos/TemperStub/CMakeLists.txt \
 
 /usr/share/cmake-3.31/Modules/Compiler/Fujitsu-DetermineCompiler.cmake:
 
-/usr/share/cmake-3.31/Modules/Compiler/Embarcadero-DetermineCompiler.cmake:
-
 /usr/share/cmake-3.31/Modules/Compiler/Cray-DetermineCompiler.cmake:
 
 /usr/share/cmake-3.31/Modules/Compiler/Compaq-CXX-DetermineCompiler.cmake:
@@ -982,6 +982,10 @@ TemperStub_autogen/timestamp: /home/jak/git_repos/TemperStub/CMakeLists.txt \
 /usr/lib/x86_64-linux-gnu/cmake/Qt6DBusPrivate/Qt6DBusPrivateTargets.cmake:
 
 /usr/lib/x86_64-linux-gnu/cmake/Qt6Core/Qt6CoreDependencies.cmake:
+
+/usr/lib/x86_64-linux-gnu/cmake/Qt6Core/Qt6CoreConfigVersionImpl.cmake:
+
+/usr/lib/x86_64-linux-gnu/cmake/Qt6Core/Qt6CoreConfigVersion.cmake:
 
 /usr/lib/x86_64-linux-gnu/cmake/Qt6WidgetsTools/Qt6WidgetsToolsConfigVersion.cmake:
 
@@ -2055,6 +2059,8 @@ TemperStub_autogen/moc_predefs.h:
 
 /usr/include/x86_64-linux-gnu/qt6/QtCore/qversiontagging.h:
 
+/usr/include/x86_64-linux-gnu/qt6/QtGui/QStandardItemModel:
+
 /usr/share/cmake-3.31/Modules/Compiler/Clang-DetermineCompiler.cmake:
 
 /usr/include/x86_64-linux-gnu/qt6/QtGui/qcolor.h:
@@ -2066,6 +2072,10 @@ TemperStub_autogen/moc_predefs.h:
 /usr/include/x86_64-linux-gnu/qt6/QtGui/qpixelformat.h:
 
 /usr/include/x86_64-linux-gnu/qt6/QtGui/qpolygon.h:
+
+/usr/share/cmake-3.31/Modules/Compiler/Embarcadero-DetermineCompiler.cmake:
+
+/usr/include/x86_64-linux-gnu/qt6/QtGui/qstandarditemmodel.h:
 
 /usr/include/x86_64-linux-gnu/qt6/QtGui/qtgui-config.h:
 
@@ -2242,7 +2252,3 @@ TemperStub_autogen/moc_predefs.h:
 /usr/include/c++/15/tr1/bessel_function.tcc:
 
 /usr/lib/x86_64-linux-gnu/cmake/Qt6Core/Qt6CoreConfig.cmake:
-
-/usr/lib/x86_64-linux-gnu/cmake/Qt6Core/Qt6CoreConfigVersion.cmake:
-
-/usr/lib/x86_64-linux-gnu/cmake/Qt6Core/Qt6CoreConfigVersionImpl.cmake:
