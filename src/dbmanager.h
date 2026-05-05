@@ -9,7 +9,7 @@ struct Fund {
     int id = 0;
     QString name;
     QString description;
-    QString restrictionType; // "WODR" or "WDR"
+    QString restriction_type; // "WODR" or "WDR"
 };
 
 struct Transaction {

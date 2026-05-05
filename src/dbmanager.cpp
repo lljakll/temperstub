@@ -45,7 +45,7 @@ void DbManager::createTables() {
 
     // Transactions Header
     query.exec(R"(CREATE TABLE IF NOT EXISTS transactions (
-        id TEXT PRIMARY KEY,
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
         date TEXT NOT NULL,
         description TEXT NOT NULL,
         total_amount REAL NOT NULL,
@@ -70,7 +70,6 @@ void DbManager::createTables() {
         amount REAL NOT NULL,
         natural_class TEXT,
         functional_class TEXT,
-        transaction_type TEXT,
         notes TEXT
     );)");
     
@@ -85,6 +84,8 @@ void DbManager::createTables() {
         id INTEGER PRIMARY KEY,
         name TEXT NOT NULL UNIQUE
     );)");
+
+    qDebug() << "✅ All tables created/validated with updated schema";
 }
 
 QString DbManager::generateNextTransactionId() const {
@@ -105,15 +106,21 @@ QString DbManager::generateNextTransactionId() const {
 QList<Fund> DbManager::getAllFunds() const {
     QList<Fund> funds;
     QSqlQuery query(db);
-    query.exec("SELECT id, name, description, restriction_type FROM funds");
+    query.exec(R"(
+        SELECT id, name, description, restriction_type 
+        FROM funds 
+        ORDER BY name
+    )");
+
     while (query.next()) {
         Fund f;
-        f.id = query.value(0).toInt();
-        f.name = query.value(1).toString();
-        f.description = query.value(2).toString();
-        f.restrictionType = query.value(3).toString();
+        f.id               = query.value(0).toInt();
+        f.name             = query.value(1).toString();
+        f.description      = query.value(2).toString();
+        f.restriction_type = query.value(3).toString();
         funds.append(f);
     }
+
     return funds;
 }
 
@@ -233,6 +240,7 @@ void DbManager::seedDefaultLookups() {
         q.exec("INSERT INTO funds (name, description, restriction_type) VALUES ('Missions', 'Outreach and missions', 'WDR')");
         q.exec("INSERT INTO funds (name, description, restriction_type) VALUES ('Youth', 'Youth ministry', 'WDR')");
     }
+    qDebug() << "Initial funds seeded.";
 
     // Accounts
     check.exec("SELECT COUNT(*) FROM accounts");
@@ -244,6 +252,7 @@ void DbManager::seedDefaultLookups() {
         q.exec("INSERT INTO accounts (code, name, type) VALUES ('5000', 'Program Expenses', 'Expense')");
         q.exec("INSERT INTO accounts (code, name, type) VALUES ('6000', 'Management & General', 'Expense')");
     }
+    qDebug() << "Initial accounts seeded.";
 
     // Natural Classes
     check.exec("SELECT COUNT(*) FROM natural_classes");
@@ -256,6 +265,7 @@ void DbManager::seedDefaultLookups() {
         q.exec("INSERT INTO natural_classes (name) VALUES ('Travel')");
         q.exec("INSERT INTO natural_classes (name) VALUES ('Other')");
     }
+    qDebug() << "Initial Natural seeded.";
 
     // Functional Classes
     check.exec("SELECT COUNT(*) FROM functional_classes");
@@ -265,4 +275,5 @@ void DbManager::seedDefaultLookups() {
         q.exec("INSERT INTO functional_classes (name) VALUES ('Management & General')");
         q.exec("INSERT INTO functional_classes (name) VALUES ('Fundraising')");
     }
+    qDebug() << "Initial Functional seeded.";
 }

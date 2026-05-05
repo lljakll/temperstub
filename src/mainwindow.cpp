@@ -19,6 +19,7 @@
 #include <QEvent>
 #include <QCheckBox>
 #include <QTextEdit>
+#include <QSqlError>
 
 MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     dbManager = new DbManager(this);
@@ -130,164 +131,313 @@ void MainWindow::switchPage(int index) {
 }
 
 void MainWindow::onNewTransaction() {
-    qDebug() << "Double-Entry Dialog opened";
+    qDebug() << "New Transaction Dialog opened";
 
     QDialog dlg(this);
-    dlg.setWindowTitle("New Transaction Entry - Hope Baptist Church");
+    dlg.setWindowTitle("New Transaction - Hope Baptist Church");
+    dlg.resize(1280, 680);
+    dlg.setMinimumSize(1280, 680);
+
     QVBoxLayout* mainL = new QVBoxLayout(&dlg);
     mainL->setContentsMargins(16, 16, 16, 16);
     mainL->setSpacing(12);
 
-    // Transaction Details
-    QGroupBox* detailsBox = new QGroupBox("Transaction Details");
-    QFormLayout* detailsF = new QFormLayout(detailsBox);
+    // ====================== HEADER ======================
+    QHBoxLayout* headerL = new QHBoxLayout;
+    QFormLayout* left = new QFormLayout;
     QDateEdit* dateEdit = new QDateEdit(QDate::currentDate());
     dateEdit->setCalendarPopup(true);
-    detailsF->addRow("Date", dateEdit);
-
     QLineEdit* descEdit = new QLineEdit;
-    detailsF->addRow("Description", descEdit);
-
     QLineEdit* payeeEdit = new QLineEdit;
-    detailsF->addRow("Payee/Donor", payeeEdit);
-
-    QLineEdit* refEdit = new QLineEdit;
-    detailsF->addRow("Reference", refEdit);
-
     QLineEdit* approvedEdit = new QLineEdit;
-    detailsF->addRow("Approved By", approvedEdit);
 
-    mainL->addWidget(detailsBox);
+    left->addRow("Date", dateEdit);
+    left->addRow("Description", descEdit);
+    left->addRow("Payee/Donor", payeeEdit);
+    left->addRow("Approved By", approvedEdit);
+    headerL->addLayout(left);
 
-    // Reconcile label
+    QFormLayout* right = new QFormLayout;
+    QLineEdit* refEdit = new QLineEdit;
+
+    QComboBox* statusCombo = new QComboBox;
+    statusCombo->addItems({"", "C - Cleared", "R - Reconciled"});
+
+    right->addRow("Reference #", refEdit);
+    right->addRow("Status", statusCombo);
+    headerL->addLayout(right);
+    mainL->addLayout(headerL);
+
+    // ====================== TRANSACTION LINES TABLE ======================
+    QTableWidget* txTable = new QTableWidget(0, 9);
+    txTable->setHorizontalHeaderLabels({
+        "Line", "Account", "Fund", "Type", "Natural Class",
+        "Functional Class", "Memo/Note", "Debit", "Credit"
+    });
+    txTable->setAlternatingRowColors(true);
+    txTable->horizontalHeader()->setStretchLastSection(false);
+
+    txTable->setColumnWidth(0, 50);
+    txTable->setColumnWidth(1, 220);
+    txTable->setColumnWidth(2, 180);   // Fund column
+    txTable->setColumnWidth(3, 110);
+    txTable->setColumnWidth(4, 150);
+    txTable->setColumnWidth(5, 150);
+    txTable->setColumnWidth(7, 100);
+    txTable->setColumnWidth(8, 100);
+    txTable->horizontalHeader()->setSectionResizeMode(6, QHeaderView::Stretch); // Memo
+
+    mainL->addWidget(txTable);
+
+    QPushButton* addBtn = new QPushButton("+ Add Line");
+    mainL->addWidget(addBtn);
+
     QLabel* reconcileLabel = new QLabel("Reconcile: $0.00");
+    reconcileLabel->setAlignment(Qt::AlignRight);
     mainL->addWidget(reconcileLabel);
 
-    // Lists declared early
-    QList<QDoubleSpinBox*> fromSpins;
-    QList<QDoubleSpinBox*> toSpins;
-
-    auto updateReconcile = [&]() {
-        double fromSum = 0.0, toSum = 0.0;
-        for (auto* s : fromSpins) fromSum += s->value();
-        for (auto* s : toSpins) toSum += s->value();
-        double diff = toSum - fromSum;
-        reconcileLabel->setText(QString("Reconcile: $%1").arg(diff, 0, 'f', 2));
-        reconcileLabel->setStyleSheet(qAbs(diff) < 0.01 ? "color: green; font-weight: bold;" : "color: red; font-weight: bold;");
-    };
-
-    // === FROM (Debits) ===
-    QGroupBox* fromBox = new QGroupBox("From (Debits)");
-    QVBoxLayout* fromL = new QVBoxLayout(fromBox);
-
-    auto addFromLine = [&]() {
-        QHBoxLayout* line = new QHBoxLayout;
-        QComboBox* accountCombo = new QComboBox;
-        QList<Account> accts = dbManager->getAllAccounts();
-        for (const Account& a : accts) accountCombo->addItem(a.name + " (" + a.code + ")", a.id);
-
-        QDoubleSpinBox* amt = new QDoubleSpinBox;
-        amt->setRange(0, 9999999.99);
-        amt->setDecimals(2);
-        amt->setPrefix("$ ");
-        amt->setValue(0.0);
-
-        fromSpins.append(amt);
-        connect(amt, QOverload<double>::of(&QDoubleSpinBox::valueChanged), updateReconcile);
-
-        QComboBox* nat = new QComboBox; nat->addItems({"Contributions","Salaries & Housing","Utilities","Supplies","Travel","Other"});
-        QComboBox* func = new QComboBox; func->addItems({"Program Services","Management & General","Fundraising"});
-
-        line->addWidget(accountCombo);
-        line->addWidget(amt);
-        line->addWidget(nat);
-        line->addWidget(func);
-        fromL->addLayout(line);
-        updateReconcile();
-    };
-
-    QPushButton* addFromBtn = new QPushButton("+ Add From Line");
-    connect(addFromBtn, &QPushButton::clicked, addFromLine);
-    fromL->addWidget(addFromBtn);
-    addFromLine(); // start with one
-    mainL->addWidget(fromBox);
-
-    // === TO (Credits) ===
-    QGroupBox* toBox = new QGroupBox("To (Credits)");
-    QVBoxLayout* toL = new QVBoxLayout(toBox);
-
-    auto addToLine = [&]() {
-        QHBoxLayout* line = new QHBoxLayout;
-        QComboBox* accountCombo = new QComboBox;
-        QList<Account> accts = dbManager->getAllAccounts();
-        for (const Account& a : accts) accountCombo->addItem(a.name + " (" + a.code + ")", a.id);
-
-        QDoubleSpinBox* amt = new QDoubleSpinBox;
-        amt->setRange(0, 9999999.99);
-        amt->setDecimals(2);
-        amt->setPrefix("$ ");
-        amt->setValue(0.0);
-
-        toSpins.append(amt);
-        connect(amt, QOverload<double>::of(&QDoubleSpinBox::valueChanged), updateReconcile);
-
-        QComboBox* nat = new QComboBox; nat->addItems({"Contributions","Salaries & Housing","Utilities","Supplies","Travel","Other"});
-        QComboBox* func = new QComboBox; func->addItems({"Program Services","Management & General","Fundraising"});
-
-        line->addWidget(accountCombo);
-        line->addWidget(amt);
-        line->addWidget(nat);
-        line->addWidget(func);
-        toL->addLayout(line);
-        updateReconcile();
-    };
-
-    QPushButton* addToBtn = new QPushButton("+ Add To Line");
-    connect(addToBtn, &QPushButton::clicked, addToLine);
-    toL->addWidget(addToBtn);
-    addToLine(); // start with one
-    mainL->addWidget(toBox);
-
-    // Buttons
     QDialogButtonBox* btns = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
     mainL->addWidget(btns);
+
+    // ====================== RECONCILE HELPER ======================
+    auto updateReconcile = [&]() {
+        double debits = 0.0, credits = 0.0;
+        for (int r = 0; r < txTable->rowCount(); ++r) {
+            debits += txTable->item(r, 7) ? txTable->item(r, 7)->text().toDouble() : 0.0;
+            credits += txTable->item(r, 8) ? txTable->item(r, 8)->text().toDouble() : 0.0;
+        }
+        double diff = debits - credits;
+        reconcileLabel->setText(QString("Reconcile: $%1").arg(diff, 0, 'f', 2));
+        reconcileLabel->setStyleSheet(qAbs(diff) < 0.01 ?
+            "color: green; font-weight: bold;" : "color: red; font-weight: bold;");
+    };
+
+    // ====================== ADD LINE ======================
+    connect(addBtn, &QPushButton::clicked, this, [&]() {
+        int row = txTable->rowCount();
+        txTable->insertRow(row);
+
+        txTable->setItem(row, 0, new QTableWidgetItem(QString::number(row + 1)));
+        txTable->setItem(row, 6, new QTableWidgetItem(""));   // Memo
+        txTable->setItem(row, 7, new QTableWidgetItem("0.00")); // Debit
+        txTable->setItem(row, 8, new QTableWidgetItem("0.00")); // Credit
+
+        // Account Combo
+        QComboBox* acctCombo = new QComboBox;
+        acctCombo->addItem("(Select Account)", -1);
+        for (const Account& a : dbManager->getAllAccounts()) {
+            acctCombo->addItem(a.name + " (" + a.code + ")", QVariant::fromValue(a));
+        }
+        txTable->setCellWidget(row, 1, acctCombo);
+
+        // Fund Combo (NEW)
+        QComboBox* fundCombo = new QComboBox;
+        fundCombo->addItem("(Select Fund)", -1);
+        for (const auto& f : dbManager->getAllFunds()) {   // You'll need this method
+            fundCombo->addItem(f.name, QVariant::fromValue(f.id));
+        }
+        txTable->setCellWidget(row, 2, fundCombo);
+
+        // Natural & Functional Class Combos
+        QComboBox* natCombo = new QComboBox; natCombo->addItem("(None)");
+        QSqlQuery natQ(dbManager->db); natQ.exec("SELECT name FROM natural_classes ORDER BY name");
+        while (natQ.next()) natCombo->addItem(natQ.value(0).toString());
+        txTable->setCellWidget(row, 4, natCombo);
+
+        QComboBox* funcCombo = new QComboBox; funcCombo->addItem("(None)");
+        QSqlQuery funcQ(dbManager->db); funcQ.exec("SELECT name FROM functional_classes ORDER BY name");
+        while (funcQ.next()) funcCombo->addItem(funcQ.value(0).toString());
+        txTable->setCellWidget(row, 5, funcCombo);
+
+        // Account type update lambda
+        connect(acctCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
+            [txTable, row, updateReconcile](int idx) {
+                if (idx <= 0) {
+                    txTable->setItem(row, 3, new QTableWidgetItem(""));
+                    updateReconcile();
+                    return;
+                }
+                QComboBox* combo = qobject_cast<QComboBox*>(txTable->cellWidget(row, 1));
+                Account a = qvariant_cast<Account>(combo->currentData());
+
+                QString typeStr = a.type;
+                if (a.type == "Asset" || a.type == "Expense")
+                    typeStr += " (D)";
+                else
+                    typeStr += " (C)";
+
+                txTable->setItem(row, 3, new QTableWidgetItem(typeStr));
+                updateReconcile();
+            });
+
+        updateReconcile();
+    });
+
+    connect(txTable, &QTableWidget::itemChanged, this, updateReconcile);
 
     connect(btns, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
     connect(btns, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
 
+    // ====================== SAVE LOOP ======================
     while (true) {
         if (dlg.exec() != QDialog::Accepted) break;
 
         if (descEdit->text().trimmed().isEmpty()) {
-            QMessageBox::warning(this, "Missing", "Description required.");
+            QMessageBox::warning(this, "Required", "Description is required.");
             continue;
         }
 
-        double fromSum = 0.0, toSum = 0.0;
-        for (auto* s : fromSpins) fromSum += s->value();
-        for (auto* s : toSpins) toSum += s->value();
-        if (qAbs(toSum - fromSum) > 0.01) {
-            QMessageBox::warning(this, "Unbalanced", "Transaction must balance to $0.00");
+        // Balance check
+        double debits = 0.0, credits = 0.0;
+        for (int r = 0; r < txTable->rowCount(); ++r) {
+            debits += txTable->item(r, 7) ? txTable->item(r, 7)->text().toDouble() : 0.0;
+            credits += txTable->item(r, 8) ? txTable->item(r, 8)->text().toDouble() : 0.0;
+        }
+        if (qAbs(debits - credits) > 0.01) {
+            QMessageBox::warning(this, "Unbalanced", "Debits must equal Credits.");
             continue;
         }
 
-        // Save header
-        QString txId = dbManager->generateNextTransactionId();
+        QString userReference = refEdit->text().trimmed();
+        if (userReference.isEmpty()) {
+            userReference = "REF-" + QDate::currentDate().toString("yyMMdd");
+        }
+
+        // ====================== SAVE LOGIC ======================
+        if (!dbManager->db.transaction()) {
+            QMessageBox::critical(this, "DB Error", "Failed to start transaction");
+            continue;
+        }
+
+        bool success = false;
+        int linesSaved = 0;
+        qlonglong txId = 0;
+
+        // Save Header
         QSqlQuery header(dbManager->db);
-        header.prepare("INSERT INTO transactions (id, date, description, total_amount, payee_donor, reference, approved_by) VALUES (?, ?, ?, ?, ?, ?, ?)");
-        header.addBindValue(txId);
+        header.prepare(R"(
+            INSERT INTO transactions 
+            (date, description, total_amount, payee_donor, reference, approved_by)
+            VALUES (?, ?, ?, ?, ?, ?)
+        )");
+
         header.addBindValue(dateEdit->date().toString(Qt::ISODate));
         header.addBindValue(descEdit->text().trimmed());
-        header.addBindValue(toSum);
+        header.addBindValue(debits);
         header.addBindValue(payeeEdit->text().trimmed());
-        header.addBindValue(refEdit->text().trimmed());
+        header.addBindValue(userReference);
         header.addBindValue(approvedEdit->text().trimmed());
-        header.exec();
 
-        QMessageBox::information(this, "✅ Success", "Transaction " + txId + " saved!");
+        if (!header.exec()) {
+            QMessageBox::critical(this, "Save Error", "Failed to save header:\n" + header.lastError().text());
+            dbManager->db.rollback();
+            continue;
+        }
+
+        txId = header.lastInsertId().toLongLong();
+        if (txId <= 0) {
+            QMessageBox::critical(this, "Error", "Failed to retrieve transaction ID");
+            dbManager->db.rollback();
+            continue;
+        }
+
+        qDebug() << "✅ Generated Transaction ID:" << txId;
+
+        // Handle Status
+        QString statusText = statusCombo->currentText();
+        int cleared = 0, reconciled = 0;
+        QString clearedDate, reconciledDate;
+
+        if (statusText.startsWith("C")) {
+            cleared = 1; clearedDate = QDate::currentDate().toString(Qt::ISODate);
+        } else if (statusText.startsWith("R")) {
+            reconciled = 1; reconciledDate = QDate::currentDate().toString(Qt::ISODate);
+        }
+
+        QSqlQuery statusQ(dbManager->db);
+        statusQ.prepare(R"(
+            UPDATE transactions SET cleared = ?, cleared_date = ?,
+                reconciled = ?, reconciled_date = ? WHERE id = ?
+        )");
+        statusQ.addBindValue(cleared);
+        statusQ.addBindValue(clearedDate);
+        statusQ.addBindValue(reconciled);
+        statusQ.addBindValue(reconciledDate);
+        statusQ.addBindValue(txId);
+        statusQ.exec();
+
+        // Save Lines (with real Fund selection)
+        for (int r = 0; r < txTable->rowCount(); ++r) {
+            QComboBox* acctCombo = qobject_cast<QComboBox*>(txTable->cellWidget(r, 1));
+            QComboBox* fundCombo = qobject_cast<QComboBox*>(txTable->cellWidget(r, 2));
+
+            if (!acctCombo || acctCombo->currentIndex() <= 0) continue;
+            if (!fundCombo || fundCombo->currentIndex() <= 0) {
+                QMessageBox::warning(this, "Missing Fund", "Please select a Fund for every line.");
+                dbManager->db.rollback();
+                goto save_failed;   // simple way to break out
+            }
+
+            Account a = qvariant_cast<Account>(acctCombo->currentData());
+            int fundId = fundCombo->currentData().toInt();
+
+            QString nat = "", func = "";
+            if (QComboBox* natC = qobject_cast<QComboBox*>(txTable->cellWidget(r, 4)))
+                if (natC->currentIndex() > 0) nat = natC->currentText();
+            if (QComboBox* funcC = qobject_cast<QComboBox*>(txTable->cellWidget(r, 5)))
+                if (funcC->currentIndex() > 0) func = funcC->currentText();
+
+            double debitAmt = txTable->item(r, 7) ? txTable->item(r, 7)->text().toDouble() : 0.0;
+            double creditAmt = txTable->item(r, 8) ? txTable->item(r, 8)->text().toDouble() : 0.0;
+            QString memo = txTable->item(r, 6) ? txTable->item(r, 6)->text().trimmed() : "";
+
+            double finalAmount = debitAmt - creditAmt;
+
+            QSqlQuery line(dbManager->db);
+            line.prepare(R"(
+                INSERT INTO transaction_lines 
+                (transaction_id, account_id, fund_id, amount, natural_class, functional_class, notes)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            )");
+
+            line.addBindValue(txId);
+            line.addBindValue(a.id);
+            line.addBindValue(fundId);
+            line.addBindValue(finalAmount);
+            line.addBindValue(nat);
+            line.addBindValue(func);
+            line.addBindValue(memo);
+
+            if (line.exec()) {
+                linesSaved++;
+            } else {
+                qDebug() << "Line" << r << "failed:" << line.lastError().text();
+            }
+        }
+
+        if (linesSaved == 0) {
+            QMessageBox::warning(this, "Warning", "No valid lines were saved.");
+            dbManager->db.rollback();
+            continue;
+        }
+
+        if (dbManager->db.commit()) {
+            success = true;
+        } else {
+            dbManager->db.rollback();
+            continue;
+        }
+
+        QMessageBox::information(this, "✅ Success",
+            QString("Transaction saved!\n\nID: %1\nReference: %2\nLines saved: %3")
+                .arg(QString::number(txId), userReference, QString::number(linesSaved)));
+
         refreshAll();
         break;
-    }
+
+    save_failed:
+        continue;
+    } // end while(true)
 }
 
 void MainWindow::onManageLookups() {
@@ -641,7 +791,7 @@ void MainWindow::refreshFundTable(QStandardItemModel* model) {
         row << new QStandardItem(QString::number(f.id))
             << new QStandardItem(f.name)
             << new QStandardItem(f.description)
-            << new QStandardItem(f.restrictionType == "WDR" ? "Yes" : "No");
+            << new QStandardItem(f.restriction_type == "WDR" ? "Yes" : "No");
         model->appendRow(row);
     }
 }
@@ -796,18 +946,26 @@ void MainWindow::refreshAll() {
     auto txs = dbManager->getAllTransactions();
     QStandardItemModel* model = new QStandardItemModel(this);
     model->setHorizontalHeaderLabels({"Date", "Description", "Amount", "Fund", "Natural", "Functional", "Type"});
+
     for (int i = 0; i < qMin(15, txs.size()); ++i) {
         const auto& t = txs[i];
+
+        QString fundName = (t.fundId > 0) 
+            ? getFundName(t.fundId) 
+            : "";                     // Blank for no fund
+
         QList<QStandardItem*> row;
         row << new QStandardItem(t.date.toString("yyyy-MM-dd"))
             << new QStandardItem(t.description)
             << new QStandardItem(QString("$%1").arg(t.amount, 0, 'f', 2))
-            << new QStandardItem(getFundName(t.fundId))
+            << new QStandardItem(fundName)           // ← Fixed
             << new QStandardItem(t.naturalClass)
             << new QStandardItem(t.functionalClass)
             << new QStandardItem(t.transactionType);
+
         model->appendRow(row);
     }
+
     recentTxTable->setModel(model);
     recentTxTable->resizeColumnsToContents();
 }
