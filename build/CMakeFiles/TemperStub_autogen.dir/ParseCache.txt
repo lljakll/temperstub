@@ -460,6 +460,7 @@
  mdp:/usr/include/x86_64-linux-gnu/qt6/QtWidgets/QMainWindow
  mdp:/usr/include/x86_64-linux-gnu/qt6/QtWidgets/QStackedWidget
  mdp:/usr/include/x86_64-linux-gnu/qt6/QtWidgets/QTableView
+ mdp:/usr/include/x86_64-linux-gnu/qt6/QtWidgets/QTableWidget
  mdp:/usr/include/x86_64-linux-gnu/qt6/QtWidgets/qabstractitemdelegate.h
  mdp:/usr/include/x86_64-linux-gnu/qt6/QtWidgets/qabstractitemview.h
  mdp:/usr/include/x86_64-linux-gnu/qt6/QtWidgets/qabstractscrollarea.h
@@ -479,6 +480,7 @@
  mdp:/usr/include/x86_64-linux-gnu/qt6/QtWidgets/qstyleoption.h
  mdp:/usr/include/x86_64-linux-gnu/qt6/QtWidgets/qtabbar.h
  mdp:/usr/include/x86_64-linux-gnu/qt6/QtWidgets/qtableview.h
+ mdp:/usr/include/x86_64-linux-gnu/qt6/QtWidgets/qtablewidget.h
  mdp:/usr/include/x86_64-linux-gnu/qt6/QtWidgets/qtabwidget.h
  mdp:/usr/include/x86_64-linux-gnu/qt6/QtWidgets/qtwidgets-config.h
  mdp:/usr/include/x86_64-linux-gnu/qt6/QtWidgets/qtwidgetsexports.h
