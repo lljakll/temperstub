@@ -50,18 +50,19 @@ void MainWindow::setupUI() {
         QListWidget::item { padding: 14px 12px; border-bottom: 1px solid #34495e; }
         QListWidget::item:selected { background: #3498db; color: white; }
     )");
-    // Sidebar items
-    sidebar->addItem("Dashboard");
-    sidebar->addItem("New Transaction");
-    sidebar->addItem("Manage Lookups");           // Manage Lookups
-    sidebar->addItem("Transactions");
-    sidebar->addItem("Reports");
+
+    // Sidebar items - exact order you want
+    sidebar->addItem("Dashboard");        // index 0
+    sidebar->addItem("New Transaction");  // index 1
+    sidebar->addItem("Manage Lookups");   // index 2
+    sidebar->addItem("Transactions");     // index 3
+    sidebar->addItem("Funds");            // index 4
 
     connect(sidebar, &QListWidget::currentRowChanged, this, &MainWindow::switchPage);
 
     stack = new QStackedWidget;
 
-    // Dashboard Page
+    // Dashboard Page (index 0)
     dashboardPage = new QWidget;
     auto* dashL = new QVBoxLayout(dashboardPage);
     dashL->setContentsMargins(24, 24, 24, 24);
@@ -89,22 +90,11 @@ void MainWindow::setupUI() {
 
     stack->addWidget(dashboardPage);
 
-    // Funds Page
-    fundsPage = new QWidget;
-    auto* fundsL = new QVBoxLayout(fundsPage);
-    fundsL->setContentsMargins(24, 24, 24, 24);
-    auto* fundTable = new QTableWidget(0, 3);
-    fundTable->setHorizontalHeaderLabels({"Fund", "Restriction", "Balance"});
-    fundTable->horizontalHeader()->setStretchLastSection(true);
-    fundsL->addWidget(fundTable);
-    stack->addWidget(fundsPage);
+    // Placeholder for Manage Lookups (index 2)
+    stack->addWidget(new QWidget());   // index 1 - will be replaced by onNewTransaction logic
+    stack->addWidget(new QWidget());   // index 2 - Manage Lookups
 
-    // Transactions Page
-    transactionsPage = new QWidget;
-    auto* txL = new QVBoxLayout(transactionsPage);
-    txL->setContentsMargins(24, 24, 24, 24);
-    txL->addWidget(new QLabel("Full Transaction Ledger – coming soon"));
-    stack->addWidget(transactionsPage);
+    // Transactions Ledger will be inserted at index 3
 
     auto* splitter = new QSplitter(Qt::Horizontal);
     splitter->addWidget(sidebar);
@@ -115,19 +105,33 @@ void MainWindow::setupUI() {
     setCentralWidget(central);
 
     sidebar->setCurrentRow(0);
+
+    // ====================== FINAL SETUP ======================
+    setupTransactionsPage();    // Insert at index 3
+    loadTransactions();
+
+    setupFundsBalancesPage();   // Insert at index 4
+    loadFundBalances();
 }
 
 void MainWindow::switchPage(int index) {
-    stack->setCurrentIndex(index);   // ← use 'stack' not sidebar
+    stack->setCurrentIndex(index);
 
     if (index == 1) {           // New Transaction
         onNewTransaction();
-        sidebar->setCurrentRow(0); // optional: return to Dashboard after opening dialog
+        sidebar->setCurrentRow(0);
     } 
-    else if (index == 2) {      // Lookups
+    else if (index == 2) {      // Manage Lookups
         onManageLookups();
-        sidebar->setCurrentRow(0);  // Return to dashboard after closing dialog
-    } 
+        sidebar->setCurrentRow(0);
+    }
+    else if (index == 3) {      // Transactions Ledger
+        loadTransactions();     // Refresh the list when we switch to it
+        // sidebar->setCurrentRow(0);  // optional
+    }
+    else if (index == 4) {           // Now Funds Balances
+    loadFundBalances();
+    }
 }
 
 void MainWindow::onNewTransaction() {
@@ -159,7 +163,6 @@ void MainWindow::onNewTransaction() {
 
     QFormLayout* right = new QFormLayout;
     QLineEdit* refEdit = new QLineEdit;
-
     QComboBox* statusCombo = new QComboBox;
     statusCombo->addItems({"", "C - Cleared", "R - Reconciled"});
 
@@ -179,13 +182,13 @@ void MainWindow::onNewTransaction() {
 
     txTable->setColumnWidth(0, 50);
     txTable->setColumnWidth(1, 220);
-    txTable->setColumnWidth(2, 180);   // Fund column
+    txTable->setColumnWidth(2, 180);
     txTable->setColumnWidth(3, 110);
     txTable->setColumnWidth(4, 150);
     txTable->setColumnWidth(5, 150);
     txTable->setColumnWidth(7, 100);
     txTable->setColumnWidth(8, 100);
-    txTable->horizontalHeader()->setSectionResizeMode(6, QHeaderView::Stretch); // Memo
+    txTable->horizontalHeader()->setSectionResizeMode(6, QHeaderView::Stretch);
 
     mainL->addWidget(txTable);
 
@@ -199,7 +202,6 @@ void MainWindow::onNewTransaction() {
     QDialogButtonBox* btns = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
     mainL->addWidget(btns);
 
-    // ====================== RECONCILE HELPER ======================
     auto updateReconcile = [&]() {
         double debits = 0.0, credits = 0.0;
         for (int r = 0; r < txTable->rowCount(); ++r) {
@@ -218,9 +220,9 @@ void MainWindow::onNewTransaction() {
         txTable->insertRow(row);
 
         txTable->setItem(row, 0, new QTableWidgetItem(QString::number(row + 1)));
-        txTable->setItem(row, 6, new QTableWidgetItem(""));   // Memo
-        txTable->setItem(row, 7, new QTableWidgetItem("0.00")); // Debit
-        txTable->setItem(row, 8, new QTableWidgetItem("0.00")); // Credit
+        txTable->setItem(row, 6, new QTableWidgetItem(""));
+        txTable->setItem(row, 7, new QTableWidgetItem("0.00"));
+        txTable->setItem(row, 8, new QTableWidgetItem("0.00"));
 
         // Account Combo
         QComboBox* acctCombo = new QComboBox;
@@ -230,44 +232,48 @@ void MainWindow::onNewTransaction() {
         }
         txTable->setCellWidget(row, 1, acctCombo);
 
-        // Fund Combo (NEW)
+        // Fund Combo
         QComboBox* fundCombo = new QComboBox;
         fundCombo->addItem("(Select Fund)", -1);
-        for (const auto& f : dbManager->getAllFunds()) {   // You'll need this method
+        for (const auto& f : dbManager->getAllFunds()) {
             fundCombo->addItem(f.name, QVariant::fromValue(f.id));
         }
         txTable->setCellWidget(row, 2, fundCombo);
 
-        // Natural & Functional Class Combos
+        // Natural Class
         QComboBox* natCombo = new QComboBox; natCombo->addItem("(None)");
         QSqlQuery natQ(dbManager->db); natQ.exec("SELECT name FROM natural_classes ORDER BY name");
         while (natQ.next()) natCombo->addItem(natQ.value(0).toString());
         txTable->setCellWidget(row, 4, natCombo);
 
+        // Functional Class
         QComboBox* funcCombo = new QComboBox; funcCombo->addItem("(None)");
         QSqlQuery funcQ(dbManager->db); funcQ.exec("SELECT name FROM functional_classes ORDER BY name");
         while (funcQ.next()) funcCombo->addItem(funcQ.value(0).toString());
         txTable->setCellWidget(row, 5, funcCombo);
 
-        // Account type update lambda
+        // Smart Fund Logic: Disable fund for Asset/Liability accounts
         connect(acctCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
-            [txTable, row, updateReconcile](int idx) {
+            [txTable, row, fundCombo](int idx) {
                 if (idx <= 0) {
                     txTable->setItem(row, 3, new QTableWidgetItem(""));
-                    updateReconcile();
                     return;
                 }
+
                 QComboBox* combo = qobject_cast<QComboBox*>(txTable->cellWidget(row, 1));
                 Account a = qvariant_cast<Account>(combo->currentData());
 
                 QString typeStr = a.type;
-                if (a.type == "Asset" || a.type == "Expense")
-                    typeStr += " (D)";
-                else
-                    typeStr += " (C)";
+                if (a.type == "Asset" || a.type == "Liability") {
+                    typeStr += " (D/C)";
+                    fundCombo->setCurrentIndex(0);
+                    fundCombo->setEnabled(false);
+                } else {
+                    typeStr += (a.type == "Expense" ? " (D)" : " (C)");
+                    fundCombo->setEnabled(true);
+                }
 
                 txTable->setItem(row, 3, new QTableWidgetItem(typeStr));
-                updateReconcile();
             });
 
         updateReconcile();
@@ -287,7 +293,6 @@ void MainWindow::onNewTransaction() {
             continue;
         }
 
-        // Balance check
         double debits = 0.0, credits = 0.0;
         for (int r = 0; r < txTable->rowCount(); ++r) {
             debits += txTable->item(r, 7) ? txTable->item(r, 7)->text().toDouble() : 0.0;
@@ -303,7 +308,6 @@ void MainWindow::onNewTransaction() {
             userReference = "REF-" + QDate::currentDate().toString("yyMMdd");
         }
 
-        // ====================== SAVE LOGIC ======================
         if (!dbManager->db.transaction()) {
             QMessageBox::critical(this, "DB Error", "Failed to start transaction");
             continue;
@@ -341,8 +345,6 @@ void MainWindow::onNewTransaction() {
             continue;
         }
 
-        qDebug() << "✅ Generated Transaction ID:" << txId;
-
         // Handle Status
         QString statusText = statusCombo->currentText();
         int cleared = 0, reconciled = 0;
@@ -366,20 +368,16 @@ void MainWindow::onNewTransaction() {
         statusQ.addBindValue(txId);
         statusQ.exec();
 
-        // Save Lines (with real Fund selection)
+        // Save Lines
         for (int r = 0; r < txTable->rowCount(); ++r) {
             QComboBox* acctCombo = qobject_cast<QComboBox*>(txTable->cellWidget(r, 1));
             QComboBox* fundCombo = qobject_cast<QComboBox*>(txTable->cellWidget(r, 2));
 
             if (!acctCombo || acctCombo->currentIndex() <= 0) continue;
-            if (!fundCombo || fundCombo->currentIndex() <= 0) {
-                QMessageBox::warning(this, "Missing Fund", "Please select a Fund for every line.");
-                dbManager->db.rollback();
-                goto save_failed;   // simple way to break out
-            }
 
             Account a = qvariant_cast<Account>(acctCombo->currentData());
-            int fundId = fundCombo->currentData().toInt();
+            int fundId = (fundCombo && fundCombo->isEnabled() && fundCombo->currentIndex() > 0) 
+                       ? fundCombo->currentData().toInt() : 0;   // NULL fund for Asset/Liability
 
             QString nat = "", func = "";
             if (QComboBox* natC = qobject_cast<QComboBox*>(txTable->cellWidget(r, 4)))
@@ -402,7 +400,7 @@ void MainWindow::onNewTransaction() {
 
             line.addBindValue(txId);
             line.addBindValue(a.id);
-            line.addBindValue(fundId);
+            line.addBindValue(fundId);           // Will be 0 (NULL) for Asset/Liability
             line.addBindValue(finalAmount);
             line.addBindValue(nat);
             line.addBindValue(func);
@@ -434,10 +432,7 @@ void MainWindow::onNewTransaction() {
 
         refreshAll();
         break;
-
-    save_failed:
-        continue;
-    } // end while(true)
+    }
 }
 
 void MainWindow::onManageLookups() {
@@ -1037,6 +1032,284 @@ void MainWindow::refreshSimpleLookupTable(QStandardItemModel* model, const QStri
             << new QStandardItem(query.value(1).toString());
         model->appendRow(row);
     }
+}
+
+void MainWindow::setupTransactionsPage() {
+    QWidget* page = new QWidget;
+    QVBoxLayout* mainLayout = new QVBoxLayout(page);
+    mainLayout->setContentsMargins(12, 12, 12, 12);
+    mainLayout->setSpacing(8);
+
+    QLabel* title = new QLabel("Transaction Ledger");
+    QFont titleFont = title->font();
+    titleFont.setPointSize(16);
+    titleFont.setBold(true);
+    title->setFont(titleFont);
+    mainLayout->addWidget(title);
+
+    // Main list - simple version
+    txListTable = new QTableWidget(0, 6);
+    txListTable->setHorizontalHeaderLabels({
+        "ID", "Date", "Reference", "Description", "Total", "Status"
+    });
+    txListTable->setAlternatingRowColors(true);
+    txListTable->setSelectionBehavior(QAbstractItemView::SelectRows);
+    txListTable->setSelectionMode(QAbstractItemView::SingleSelection);
+    txListTable->horizontalHeader()->setStretchLastSection(true);
+
+    txListTable->setColumnWidth(0, 60);
+    txListTable->setColumnWidth(1, 100);
+    txListTable->setColumnWidth(2, 130);
+    txListTable->setColumnWidth(4, 110);
+
+    mainLayout->addWidget(txListTable, 2);
+
+    // Details
+    QGroupBox* detailsGroup = new QGroupBox("Transaction Details");
+    QVBoxLayout* detailsVL = new QVBoxLayout(detailsGroup);
+
+    txDetailsLabel = new QLabel("Select a transaction to view line items");
+    txDetailsLabel->setWordWrap(true);
+    detailsVL->addWidget(txDetailsLabel);
+
+    txDetailsTable = new QTableWidget(0, 6);
+    txDetailsTable->setHorizontalHeaderLabels({
+        "Fund", "Account", "Amount", "Natural Class", "Functional Class", "Memo"
+    });
+    txDetailsTable->horizontalHeader()->setStretchLastSection(true);
+    detailsVL->addWidget(txDetailsTable);
+
+    mainLayout->addWidget(detailsGroup, 1);
+
+    connect(txListTable, &QTableWidget::itemSelectionChanged, this, [this]() {
+        int row = txListTable->currentRow();
+        if (row >= 0) onTransactionSelected(row);
+    });
+
+    stack->insertWidget(3, page);
+}
+
+void MainWindow::loadTransactions() {
+    if (!txListTable) return;
+    txListTable->setRowCount(0);
+
+    QSqlQuery q(dbManager->db);
+    q.exec(R"(
+        SELECT id, date, reference, description, total_amount,
+               CASE 
+                   WHEN reconciled = 1 THEN 'R - Reconciled'
+                   WHEN cleared = 1 THEN 'C - Cleared'
+                   ELSE 'Pending' 
+               END as status
+        FROM transactions 
+        ORDER BY date DESC, id DESC
+    )");
+
+    while (q.next()) {
+        int row = txListTable->rowCount();
+        txListTable->insertRow(row);
+
+        qlonglong txId = q.value("id").toLongLong();
+
+        QTableWidgetItem* idItem = new QTableWidgetItem(QString::number(txId));
+        idItem->setData(Qt::UserRole, txId);
+        txListTable->setItem(row, 0, idItem);
+
+        txListTable->setItem(row, 1, new QTableWidgetItem(q.value("date").toString()));
+        txListTable->setItem(row, 2, new QTableWidgetItem(q.value("reference").toString()));
+        txListTable->setItem(row, 3, new QTableWidgetItem(q.value("description").toString()));
+
+        double total = q.value("total_amount").toDouble();
+        QTableWidgetItem* totalItem = new QTableWidgetItem(QString::number(total, 'f', 2));
+        totalItem->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
+        txListTable->setItem(row, 4, totalItem);
+
+        txListTable->setItem(row, 5, new QTableWidgetItem(q.value("status").toString()));
+    }
+}
+
+void MainWindow::onTransactionSelected(int row)
+{
+    if (!txListTable || row < 0) return;
+
+    qlonglong txId = txListTable->item(row, 0) ? 
+                     txListTable->item(row, 0)->data(Qt::UserRole).toLongLong() : 0;
+
+    if (txId <= 0) {
+        txDetailsLabel->setText("Could not load transaction details.");
+        txDetailsTable->setRowCount(0);
+        return;
+    }
+
+    // Header info
+    QString date = txListTable->item(row, 1) ? txListTable->item(row, 1)->text() : "";
+    QString ref  = txListTable->item(row, 2) ? txListTable->item(row, 2)->text() : "";
+    QString desc = txListTable->item(row, 3) ? txListTable->item(row, 3)->text() : "";
+    QString totalStr = txListTable->item(row, 4) ? txListTable->item(row, 4)->text() : "0.00";
+
+    txDetailsLabel->setText(QString("<b>Transaction #%1</b> — %2 — %3<br>"
+                                    "<b>Description:</b> %4 &nbsp;&nbsp; <b>Total:</b> $%5")
+                                .arg(QString::number(txId), date, ref, desc, totalStr));
+
+    txDetailsTable->setRowCount(0);
+
+    QSqlQuery q(dbManager->db);
+    q.prepare(R"(
+        SELECT 
+            COALESCE(f.name, '(Asset/Liability - No Fund)') as fund_name,
+            COALESCE(a.name, '(Unknown Account)') as account_name,
+            tl.amount,
+            COALESCE(tl.natural_class, '') as natural_class,
+            COALESCE(tl.functional_class, '') as functional_class,
+            COALESCE(tl.notes, '') as notes,
+            a.type as account_type
+        FROM transaction_lines tl
+        LEFT JOIN funds f ON tl.fund_id = f.id
+        LEFT JOIN accounts a ON tl.account_id = a.id
+        WHERE tl.transaction_id = ?
+        ORDER BY tl.id
+    )");
+    q.addBindValue(txId);
+    q.exec();
+
+    while (q.next()) {
+        int r = txDetailsTable->rowCount();
+        txDetailsTable->insertRow(r);
+
+        txDetailsTable->setItem(r, 0, new QTableWidgetItem(q.value("fund_name").toString()));
+        txDetailsTable->setItem(r, 1, new QTableWidgetItem(q.value("account_name").toString()));
+
+        double rawAmt = q.value("amount").toDouble();
+        double displayAmt = rawAmt;
+
+        // Flip sign for better readability: positive = inflow to fund, negative = outflow
+        QString accType = q.value("account_type").toString();
+        if (accType == "Revenue") displayAmt = -rawAmt;
+        else if (accType == "Expense") displayAmt = rawAmt;
+
+        QTableWidgetItem* amtItem = new QTableWidgetItem(QString::number(displayAmt, 'f', 2));
+        amtItem->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
+        txDetailsTable->setItem(r, 2, amtItem);
+
+        txDetailsTable->setItem(r, 3, new QTableWidgetItem(q.value("natural_class").toString()));
+        txDetailsTable->setItem(r, 4, new QTableWidgetItem(q.value("functional_class").toString()));
+        txDetailsTable->setItem(r, 5, new QTableWidgetItem(q.value("notes").toString()));
+    }
+
+    txDetailsTable->resizeColumnsToContents();
+    qDebug() << "=== Loaded details for tx" << txId << "- rows:" << txDetailsTable->rowCount() << "===";
+}
+
+void MainWindow::setupFundsBalancesPage() {
+    QWidget* page = new QWidget;
+    QVBoxLayout* mainL = new QVBoxLayout(page);
+    mainL->setContentsMargins(24, 24, 24, 24);
+    mainL->setSpacing(16);
+
+    QLabel* title = new QLabel("Fund Balances");
+    QFont titleFont = title->font();
+    titleFont.setPointSize(16);
+    titleFont.setBold(true);
+    title->setFont(titleFont);
+    mainL->addWidget(title);
+
+    // Summary totals
+    QHBoxLayout* summaryL = new QHBoxLayout;
+    QGroupBox* summaryBox = new QGroupBox("Net Assets Summary");
+    QFormLayout* form = new QFormLayout(summaryBox);
+
+    totalWODRLabel = new QLabel("$0.00");
+    totalWDRLabel  = new QLabel("$0.00");
+    grandTotalLabel = new QLabel("$0.00");
+
+    totalWODRLabel->setStyleSheet("font-size: 18px; font-weight: bold; color: #2ecc71;");
+    totalWDRLabel->setStyleSheet("font-size: 18px; font-weight: bold; color: #e67e22;");
+    grandTotalLabel->setStyleSheet("font-size: 20px; font-weight: bold;");
+
+    form->addRow("Without Donor Restrictions (WODR):", totalWODRLabel);
+    form->addRow("With Donor Restrictions (WDR):", totalWDRLabel);
+    form->addRow("Total Net Assets:", grandTotalLabel);
+
+    summaryL->addWidget(summaryBox);
+    mainL->addLayout(summaryL);
+
+    // Funds Table
+    fundBalancesTable = new QTableWidget(0, 4);
+    fundBalancesTable->setHorizontalHeaderLabels({
+        "Fund", "Restriction Type", "Balance", "Notes"
+    });
+    fundBalancesTable->setAlternatingRowColors(true);
+    fundBalancesTable->horizontalHeader()->setStretchLastSection(true);
+    fundBalancesTable->setColumnWidth(0, 220);
+    fundBalancesTable->setColumnWidth(1, 140);
+    fundBalancesTable->setColumnWidth(2, 140);
+
+    mainL->addWidget(fundBalancesTable, 1);
+
+    QPushButton* refreshBtn = new QPushButton("↻ Refresh Balances");
+    connect(refreshBtn, &QPushButton::clicked, this, &MainWindow::loadFundBalances);
+    mainL->addWidget(refreshBtn);
+
+    stack->insertWidget(4, page);   // Insert at index 4 (after Transactions)
+}
+
+void MainWindow::loadFundBalances()
+{
+    if (!fundBalancesTable) return;
+    fundBalancesTable->setRowCount(0);
+
+    double totalWODR = 0.0;
+    double totalWDR = 0.0;
+
+    QSqlQuery q(dbManager->db);
+    q.exec(R"(
+        SELECT 
+            f.name,
+            f.restriction_type,
+            COALESCE(
+                SUM(CASE 
+                    WHEN a.type = 'Revenue' THEN -tl.amount   -- Credit to revenue increases fund
+                    WHEN a.type = 'Expense' THEN  tl.amount   -- Debit to expense decreases fund
+                    ELSE tl.amount
+                END), 0) as balance
+        FROM funds f
+        LEFT JOIN transaction_lines tl ON tl.fund_id = f.id
+        LEFT JOIN accounts a ON tl.account_id = a.id
+        WHERE tl.account_id IS NOT NULL
+        GROUP BY f.id, f.name, f.restriction_type
+        ORDER BY f.name
+    )");
+
+    while (q.next()) {
+        int row = fundBalancesTable->rowCount();
+        fundBalancesTable->insertRow(row);
+
+        QString name = q.value("name").toString();
+        QString type = q.value("restriction_type").toString();
+        double bal = q.value("balance").toDouble();
+
+        fundBalancesTable->setItem(row, 0, new QTableWidgetItem(name));
+        fundBalancesTable->setItem(row, 1, new QTableWidgetItem(type));
+
+        QTableWidgetItem* balItem = new QTableWidgetItem(QString::number(bal, 'f', 2));
+        balItem->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
+        fundBalancesTable->setItem(row, 2, balItem);
+
+        fundBalancesTable->setItem(row, 3, new QTableWidgetItem(""));
+
+        if (type == "WODR") 
+            totalWODR += bal;
+        else 
+            totalWDR += bal;
+    }
+
+    double grandTotal = totalWODR + totalWDR;
+
+    totalWODRLabel->setText(QString("$%1").arg(totalWODR, 0, 'f', 2));
+    totalWDRLabel->setText(QString("$%1").arg(totalWDR, 0, 'f', 2));
+    grandTotalLabel->setText(QString("$%1").arg(grandTotal, 0, 'f', 2));
+
+    qDebug() << "Fund Balances refreshed - WODR:" << totalWODR << "WDR:" << totalWDR;
 }
 
 void MainWindow::refreshFundsPage() {}

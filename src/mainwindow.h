@@ -7,6 +7,7 @@
 #include <QComboBox>
 #include "dbmanager.h"
 #include <QStandardItemModel>
+#include <QTableWidget>
 
 class MainWindow : public QMainWindow {
     Q_OBJECT
@@ -33,7 +34,12 @@ private:
     void refreshAccountsTable(QStandardItemModel* model);
     void showSimpleLookupDialog(const QString& title, QStandardItemModel* model, const QString& tableName, int id = -1);
     void refreshSimpleLookupTable(QStandardItemModel* model, const QString& tableName);
-
+    void setupTransactionsPage();
+    void loadTransactions();
+    void onTransactionSelected(int row);
+    // Fund Balances
+    void setupFundsBalancesPage();
+    void loadFundBalances();
     DbManager* dbManager;
 
     QStackedWidget* stack;
@@ -47,4 +53,13 @@ private:
     QLabel* wdrLabel;
     QLabel* totalLabel;
     QTableView* recentTxTable;
+
+    QTableWidget* txListTable = nullptr;
+    QTableWidget* txDetailsTable = nullptr;
+    QLabel* txDetailsLabel = nullptr;
+
+    QTableWidget* fundBalancesTable = nullptr;
+    QLabel* totalWODRLabel = nullptr;
+    QLabel* totalWDRLabel = nullptr;
+    QLabel* grandTotalLabel = nullptr;
 };
