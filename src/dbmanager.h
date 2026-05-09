@@ -10,6 +10,8 @@ struct Fund {
     QString name;
     QString description;
     QString restriction_type; // "WODR" or "WDR"
+    bool archived = false;  
+    QString archived_date;      
 };
 
 struct Transaction {
@@ -31,11 +33,15 @@ struct Account {
     QString name;
     QString type;
     int fundId;
+    bool archived = false;
+    QString archived_date;
 };
 
 struct SimpleLookup {
     int id;
     QString name;
+    bool archived = false;
+    QString archived_date;
 };
 
 class DbManager : public QObject {
@@ -43,7 +49,7 @@ class DbManager : public QObject {
 public:
     explicit DbManager(QObject* parent = nullptr);
     bool initDatabase();
-    QList<Fund> getAllFunds() const;
+    QList<Fund> getAllFunds(bool includeArchived = false) const;
     QList<Transaction> getAllTransactions() const;
     QString generateNextTransactionId() const;    
     bool addTransaction(const Transaction& t);
@@ -51,10 +57,13 @@ public:
     double getWODRTotal() const;
     double getWDRTotal() const;
     QSqlDatabase db;
-    QList<Account> getAllAccounts() const;
+    QList<Account> getAllAccounts(bool includeArchived = false) const;
     QString getFundName(int fundId) const;
-    QList<SimpleLookup> getAllNaturalClasses() const;
-    QList<SimpleLookup> getAllFunctionalClasses() const;
+    QList<SimpleLookup> getAllNaturalClasses(bool includeArchived = false) const;
+    QList<SimpleLookup> getAllFunctionalClasses(bool includeArchived = false) const;
+    bool saveAttachment(int transactionId, const QString& sourceFilePath);
+    QString getAttachmentPath(int transactionId) const;
+    bool openAttachment(int transactionId) const;
 
 private:
     void createTables();

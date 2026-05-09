@@ -20,6 +20,8 @@
 #include <QCheckBox>
 #include <QTextEdit>
 #include <QSqlError>
+#include <QFileDialog>
+#include <QFileInfo>
 
 MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     dbManager = new DbManager(this);
@@ -166,8 +168,12 @@ void MainWindow::onNewTransaction() {
     QComboBox* statusCombo = new QComboBox;
     statusCombo->addItems({"", "C - Cleared", "R - Reconciled"});
 
+    QPushButton* attachBtn = new QPushButton("📎 Attach Document");
+    QString attachedFilePath;   // Will hold the selected file path
+
     right->addRow("Reference #", refEdit);
     right->addRow("Status", statusCombo);
+    right->addRow("", attachBtn);   // Attachment button
     headerL->addLayout(right);
     mainL->addLayout(headerL);
 
@@ -214,6 +220,16 @@ void MainWindow::onNewTransaction() {
             "color: green; font-weight: bold;" : "color: red; font-weight: bold;");
     };
 
+    // ====================== ATTACH BUTTON ======================
+    connect(attachBtn, &QPushButton::clicked, this, [&]() {
+        QString file = QFileDialog::getOpenFileName(this, "Attach Document", "",
+            "PDF Files (*.pdf);;Images (*.png *.jpg *.jpeg);;All Files (*)");
+        if (!file.isEmpty()) {
+            attachedFilePath = file;
+            attachBtn->setText("📎 " + QFileInfo(file).fileName());
+        }
+    });
+
     // ====================== ADD LINE ======================
     connect(addBtn, &QPushButton::clicked, this, [&]() {
         int row = txTable->rowCount();
@@ -227,7 +243,7 @@ void MainWindow::onNewTransaction() {
         // Account Combo
         QComboBox* acctCombo = new QComboBox;
         acctCombo->addItem("(Select Account)", -1);
-        for (const Account& a : dbManager->getAllAccounts()) {
+        for (const Account& a : dbManager->getAllAccounts(false)) {
             acctCombo->addItem(a.name + " (" + a.code + ")", QVariant::fromValue(a));
         }
         txTable->setCellWidget(row, 1, acctCombo);
@@ -235,24 +251,25 @@ void MainWindow::onNewTransaction() {
         // Fund Combo
         QComboBox* fundCombo = new QComboBox;
         fundCombo->addItem("(Select Fund)", -1);
-        for (const auto& f : dbManager->getAllFunds()) {
+        for (const auto& f : dbManager->getAllFunds(false)) {
             fundCombo->addItem(f.name, QVariant::fromValue(f.id));
         }
         txTable->setCellWidget(row, 2, fundCombo);
 
-        // Natural Class
+        // Natural + Functional (using getters)
         QComboBox* natCombo = new QComboBox; natCombo->addItem("(None)");
-        QSqlQuery natQ(dbManager->db); natQ.exec("SELECT name FROM natural_classes ORDER BY name");
-        while (natQ.next()) natCombo->addItem(natQ.value(0).toString());
+        for (const SimpleLookup& n : dbManager->getAllNaturalClasses(false)) {
+            natCombo->addItem(n.name);
+        }
         txTable->setCellWidget(row, 4, natCombo);
 
-        // Functional Class
         QComboBox* funcCombo = new QComboBox; funcCombo->addItem("(None)");
-        QSqlQuery funcQ(dbManager->db); funcQ.exec("SELECT name FROM functional_classes ORDER BY name");
-        while (funcQ.next()) funcCombo->addItem(funcQ.value(0).toString());
+        for (const SimpleLookup& f : dbManager->getAllFunctionalClasses(false)) {
+            funcCombo->addItem(f.name);
+        }
         txTable->setCellWidget(row, 5, funcCombo);
 
-        // Smart Fund Logic: Disable fund for Asset/Liability accounts
+        // Smart Fund Logic
         connect(acctCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
             [txTable, row, fundCombo](int idx) {
                 if (idx <= 0) {
@@ -317,12 +334,12 @@ void MainWindow::onNewTransaction() {
         int linesSaved = 0;
         qlonglong txId = 0;
 
-        // Save Header
+        // ====================== SAVE HEADER ======================
         QSqlQuery header(dbManager->db);
         header.prepare(R"(
             INSERT INTO transactions 
-            (date, description, total_amount, payee_donor, reference, approved_by)
-            VALUES (?, ?, ?, ?, ?, ?)
+            (date, description, total_amount, payee_donor, reference, approved_by, attachment_path)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
         )");
 
         header.addBindValue(dateEdit->date().toString(Qt::ISODate));
@@ -331,6 +348,7 @@ void MainWindow::onNewTransaction() {
         header.addBindValue(payeeEdit->text().trimmed());
         header.addBindValue(userReference);
         header.addBindValue(approvedEdit->text().trimmed());
+        header.addBindValue(attachedFilePath.isEmpty() ? QVariant() : attachedFilePath);  // NULL if no file
 
         if (!header.exec()) {
             QMessageBox::critical(this, "Save Error", "Failed to save header:\n" + header.lastError().text());
@@ -368,6 +386,11 @@ void MainWindow::onNewTransaction() {
         statusQ.addBindValue(txId);
         statusQ.exec();
 
+        // ====================== SAVE ATTACHMENT ======================
+        if (!attachedFilePath.isEmpty()) {
+            dbManager->saveAttachment(txId, attachedFilePath);
+        }
+
         // Save Lines
         for (int r = 0; r < txTable->rowCount(); ++r) {
             QComboBox* acctCombo = qobject_cast<QComboBox*>(txTable->cellWidget(r, 1));
@@ -377,7 +400,7 @@ void MainWindow::onNewTransaction() {
 
             Account a = qvariant_cast<Account>(acctCombo->currentData());
             int fundId = (fundCombo && fundCombo->isEnabled() && fundCombo->currentIndex() > 0) 
-                       ? fundCombo->currentData().toInt() : 0;   // NULL fund for Asset/Liability
+                       ? fundCombo->currentData().toInt() : 0;
 
             QString nat = "", func = "";
             if (QComboBox* natC = qobject_cast<QComboBox*>(txTable->cellWidget(r, 4)))
@@ -400,7 +423,7 @@ void MainWindow::onNewTransaction() {
 
             line.addBindValue(txId);
             line.addBindValue(a.id);
-            line.addBindValue(fundId);           // Will be 0 (NULL) for Asset/Liability
+            line.addBindValue(fundId);
             line.addBindValue(finalAmount);
             line.addBindValue(nat);
             line.addBindValue(func);
@@ -442,13 +465,13 @@ void MainWindow::onManageLookups() {
 
     QTabWidget* tabs = new QTabWidget;
 
-    // === FUNDS TAB ===
+    // ====================== FUNDS TAB ======================
     QWidget* fundsTab = new QWidget;
     QVBoxLayout* fundsL = new QVBoxLayout(fundsTab);
 
     QTableView* fundsTable = new QTableView;
     QStandardItemModel* fundsModel = new QStandardItemModel(this);
-    fundsModel->setHorizontalHeaderLabels({"ID", "Name", "Description", "Donor Restricted"});
+    fundsModel->setHorizontalHeaderLabels({"ID", "Name", "Description", "Restricted", "Archived", "Archived Date"});
     fundsTable->setModel(fundsModel);
 
     refreshFundTable(fundsModel);
@@ -456,37 +479,49 @@ void MainWindow::onManageLookups() {
     fundsTable->resizeColumnsToContents();
     fundsTable->horizontalHeader()->setStretchLastSection(true);
     fundsTable->setColumnWidth(0, 60);
-    fundsTable->setColumnWidth(1, 200);
-    fundsTable->setColumnWidth(2, 350);
-    fundsTable->setColumnWidth(3, 120);
-    fundsTable->setMinimumWidth(700);
-    fundsTable->setAlternatingRowColors(true);
+    fundsTable->setColumnWidth(1, 180);
+    fundsTable->setColumnWidth(2, 300);
+    fundsTable->setColumnWidth(3, 100);
+    fundsTable->setColumnWidth(4, 80);
+    fundsTable->setColumnWidth(5, 140);
 
     fundsL->addWidget(fundsTable);
 
     QHBoxLayout* fundsBtnL = new QHBoxLayout;
-    QPushButton* fundsAddBtn = new QPushButton("Add");
-    QPushButton* fundsEditBtn = new QPushButton("Edit");
-    QPushButton* fundsDelBtn = new QPushButton("Delete");
-    fundsBtnL->addWidget(fundsAddBtn);
-    fundsBtnL->addWidget(fundsEditBtn);
-    fundsBtnL->addWidget(fundsDelBtn);
+    QPushButton* addBtn = new QPushButton("Add");
+    QPushButton* editBtn = new QPushButton("Edit");
+    QPushButton* archiveBtn = new QPushButton("Archive / Unarchive");
+    fundsBtnL->addWidget(addBtn);
+    fundsBtnL->addWidget(editBtn);
+    fundsBtnL->addWidget(archiveBtn);
     fundsL->addLayout(fundsBtnL);
 
-    connect(fundsAddBtn, &QPushButton::clicked, this, [this, fundsModel]() { showFundDialog(false, -1, fundsModel); });
-    connect(fundsEditBtn, &QPushButton::clicked, this, [this, fundsTable, fundsModel]() {
+    connect(addBtn, &QPushButton::clicked, this, [this, fundsModel]() { 
+        showFundDialog(false, -1, fundsModel); 
+    });
+    connect(editBtn, &QPushButton::clicked, this, [this, fundsTable, fundsModel]() {
         QModelIndex idx = fundsTable->currentIndex();
         if (idx.isValid()) {
             int fundId = fundsModel->item(idx.row(), 0)->text().toInt();
             showFundDialog(true, fundId, fundsModel);
         }
     });
-    connect(fundsDelBtn, &QPushButton::clicked, this, [this, fundsTable, fundsModel]() {
+    connect(archiveBtn, &QPushButton::clicked, this, [this, fundsTable, fundsModel]() {
         QModelIndex idx = fundsTable->currentIndex();
-        if (idx.isValid() && QMessageBox::question(this, "Delete", "Delete this fund?") == QMessageBox::Yes) {
-            int fundId = fundsModel->item(idx.row(), 0)->text().toInt();
+        if (!idx.isValid()) return;
+
+        int fundId = fundsModel->item(idx.row(), 0)->text().toInt();
+        bool isArchived = fundsModel->item(idx.row(), 4)->text() == "Yes";
+
+        QString msg = isArchived ? "Unarchive this fund?" : "Archive this fund? It will be hidden from dropdowns and new transactions.";
+        if (QMessageBox::question(this, "Archive Fund", msg) == QMessageBox::Yes) {
             QSqlQuery query(dbManager->db);
-            query.prepare("DELETE FROM funds WHERE id = ?");
+            if (isArchived) {
+                query.prepare("UPDATE funds SET archived = 0, archived_date = NULL WHERE id = ?");
+            } else {
+                query.prepare("UPDATE funds SET archived = 1, archived_date = ? WHERE id = ?");
+                query.addBindValue(QDate::currentDate().toString(Qt::ISODate));
+            }
             query.addBindValue(fundId);
             if (query.exec()) {
                 refreshFundTable(fundsModel);
@@ -496,54 +531,57 @@ void MainWindow::onManageLookups() {
 
     tabs->addTab(fundsTab, "Funds");
 
-    // === ACCOUNTS TAB ===
+    // ====================== ACCOUNTS TAB ======================
     QWidget* accountsTab = new QWidget;
     QVBoxLayout* accountsL = new QVBoxLayout(accountsTab);
 
     QTableView* accountsTable = new QTableView;
     QStandardItemModel* accountsModel = new QStandardItemModel(this);
-    accountsModel->setHorizontalHeaderLabels({"ID", "Code", "Name", "Type", "Fund"});
+    accountsModel->setHorizontalHeaderLabels({"ID", "Code", "Name", "Type", "Fund", "Archived", "Archived Date"});
     accountsTable->setModel(accountsModel);
 
     refreshAccountsTable(accountsModel);
 
     accountsTable->resizeColumnsToContents();
     accountsTable->horizontalHeader()->setStretchLastSection(true);
-    accountsTable->setColumnWidth(0, 60);
-    accountsTable->setColumnWidth(1, 100);
-    accountsTable->setColumnWidth(2, 250);
-    accountsTable->setColumnWidth(3, 150);
-    accountsTable->setColumnWidth(4, 150);
-    accountsTable->setMinimumWidth(1200);
-    accountsTable->setAlternatingRowColors(true);
 
     accountsL->addWidget(accountsTable);
 
     QHBoxLayout* accountsBtnL = new QHBoxLayout;
-    QPushButton* accountsAddBtn = new QPushButton("Add");
-    QPushButton* accountsEditBtn = new QPushButton("Edit");
-    QPushButton* accountsDelBtn = new QPushButton("Delete");
-    accountsBtnL->addWidget(accountsAddBtn);
-    accountsBtnL->addWidget(accountsEditBtn);
-    accountsBtnL->addWidget(accountsDelBtn);
+    QPushButton* accAddBtn = new QPushButton("Add");
+    QPushButton* accEditBtn = new QPushButton("Edit");
+    QPushButton* accArchiveBtn = new QPushButton("Archive / Unarchive");
+    accountsBtnL->addWidget(accAddBtn);
+    accountsBtnL->addWidget(accEditBtn);
+    accountsBtnL->addWidget(accArchiveBtn);
     accountsL->addLayout(accountsBtnL);
 
-    connect(accountsAddBtn, &QPushButton::clicked, this, [this, accountsModel]() { 
+    connect(accAddBtn, &QPushButton::clicked, this, [this, accountsModel]() { 
         showAccountDialog(false, -1, accountsModel); 
     });
-    connect(accountsEditBtn, &QPushButton::clicked, this, [this, accountsTable, accountsModel]() {
+    connect(accEditBtn, &QPushButton::clicked, this, [this, accountsTable, accountsModel]() {
         QModelIndex idx = accountsTable->currentIndex();
         if (idx.isValid()) {
             int accountId = accountsModel->item(idx.row(), 0)->text().toInt();
             showAccountDialog(true, accountId, accountsModel);
         }
     });
-    connect(accountsDelBtn, &QPushButton::clicked, this, [this, accountsTable, accountsModel]() {
+    connect(accArchiveBtn, &QPushButton::clicked, this, [this, accountsTable, accountsModel]() {
         QModelIndex idx = accountsTable->currentIndex();
-        if (idx.isValid() && QMessageBox::question(this, "Delete", "Delete this account?") == QMessageBox::Yes) {
-            int accountId = accountsModel->item(idx.row(), 0)->text().toInt();
+        if (!idx.isValid()) return;
+
+        int accountId = accountsModel->item(idx.row(), 0)->text().toInt();
+        bool isArchived = accountsModel->item(idx.row(), 5)->text() == "Yes";
+
+        QString msg = isArchived ? "Unarchive this account?" : "Archive this account?";
+        if (QMessageBox::question(this, "Archive Account", msg) == QMessageBox::Yes) {
             QSqlQuery query(dbManager->db);
-            query.prepare("DELETE FROM accounts WHERE id = ?");
+            if (isArchived) {
+                query.prepare("UPDATE accounts SET archived = 0, archived_date = NULL WHERE id = ?");
+            } else {
+                query.prepare("UPDATE accounts SET archived = 1, archived_date = ? WHERE id = ?");
+                query.addBindValue(QDate::currentDate().toString(Qt::ISODate));
+            }
             query.addBindValue(accountId);
             if (query.exec()) {
                 refreshAccountsTable(accountsModel);
@@ -553,103 +591,122 @@ void MainWindow::onManageLookups() {
 
     tabs->addTab(accountsTab, "Accounts");
 
-    // === NATURAL CLASSES TAB ===
+    // ====================== NATURAL CLASSES TAB ======================
     QWidget* naturalTab = new QWidget;
     QVBoxLayout* naturalL = new QVBoxLayout(naturalTab);
 
     QTableView* naturalTable = new QTableView;
     QStandardItemModel* naturalModel = new QStandardItemModel(this);
-    naturalModel->setHorizontalHeaderLabels({"ID", "Name"});
+    naturalModel->setHorizontalHeaderLabels({"ID", "Name", "Archived", "Archived Date"});
     naturalTable->setModel(naturalModel);
-    naturalTable->setAlternatingRowColors(true);
-    naturalL->addWidget(naturalTable);
 
     refreshSimpleLookupTable(naturalModel, "natural_classes");
 
+    naturalL->addWidget(naturalTable);
+
     QHBoxLayout* naturalBtnL = new QHBoxLayout;
-    QPushButton* naturalAddBtn = new QPushButton("Add");
-    QPushButton* naturalEditBtn = new QPushButton("Edit");
-    QPushButton* naturalDelBtn = new QPushButton("Delete");
-    naturalBtnL->addWidget(naturalAddBtn);
-    naturalBtnL->addWidget(naturalEditBtn);
-    naturalBtnL->addWidget(naturalDelBtn);
+    QPushButton* nAddBtn = new QPushButton("Add");
+    QPushButton* nEditBtn = new QPushButton("Edit");
+    QPushButton* nArchiveBtn = new QPushButton("Archive / Unarchive");
+    naturalBtnL->addWidget(nAddBtn);
+    naturalBtnL->addWidget(nEditBtn);
+    naturalBtnL->addWidget(nArchiveBtn);
     naturalL->addLayout(naturalBtnL);
 
-    connect(naturalAddBtn, &QPushButton::clicked, this, [this, naturalModel]() {
+    connect(nAddBtn, &QPushButton::clicked, this, [this, naturalModel]() {
         showSimpleLookupDialog("Add Natural Class", naturalModel, "natural_classes");
     });
-    connect(naturalEditBtn, &QPushButton::clicked, this, [this, naturalTable, naturalModel]() {
+    connect(nEditBtn, &QPushButton::clicked, this, [this, naturalTable, naturalModel]() {
         QModelIndex idx = naturalTable->currentIndex();
         if (idx.isValid()) {
             int id = naturalModel->item(idx.row(), 0)->text().toInt();
             showSimpleLookupDialog("Edit Natural Class", naturalModel, "natural_classes", id);
         }
     });
-    connect(naturalDelBtn, &QPushButton::clicked, this, [this, naturalTable, naturalModel]() {
+    connect(nArchiveBtn, &QPushButton::clicked, this, [this, naturalTable, naturalModel]() {
         QModelIndex idx = naturalTable->currentIndex();
-        if (idx.isValid() && QMessageBox::question(this, "Delete", "Delete this natural class?") == QMessageBox::Yes) {
-            int id = naturalModel->item(idx.row(), 0)->text().toInt();
+        if (!idx.isValid()) return;
+
+        int id = naturalModel->item(idx.row(), 0)->text().toInt();
+        bool isArchived = naturalModel->item(idx.row(), 2)->text() == "Yes";
+
+        QString msg = isArchived ? "Unarchive this natural class?" : "Archive this natural class?";
+        if (QMessageBox::question(this, "Archive", msg) == QMessageBox::Yes) {
             QSqlQuery query(dbManager->db);
-            query.prepare("DELETE FROM natural_classes WHERE id = ?");
+            if (isArchived) {
+                query.prepare("UPDATE natural_classes SET archived = 0, archived_date = NULL WHERE id = ?");
+            } else {
+                query.prepare("UPDATE natural_classes SET archived = 1, archived_date = ? WHERE id = ?");
+                query.addBindValue(QDate::currentDate().toString(Qt::ISODate));
+            }
             query.addBindValue(id);
-            if (query.exec()) refreshSimpleLookupTable(naturalModel, "natural_classes");
+            if (query.exec()) {
+                refreshSimpleLookupTable(naturalModel, "natural_classes");
+            }
         }
     });
 
     tabs->addTab(naturalTab, "Natural Classes");
 
-    // === FUNCTIONAL CLASSES TAB ===
+    // ====================== FUNCTIONAL CLASSES TAB ======================
     QWidget* functionalTab = new QWidget;
     QVBoxLayout* functionalL = new QVBoxLayout(functionalTab);
 
     QTableView* functionalTable = new QTableView;
     QStandardItemModel* functionalModel = new QStandardItemModel(this);
-    functionalModel->setHorizontalHeaderLabels({"ID", "Name"});
+    functionalModel->setHorizontalHeaderLabels({"ID", "Name", "Archived", "Archived Date"});
     functionalTable->setModel(functionalModel);
-    functionalTable->setAlternatingRowColors(true);
-    functionalL->addWidget(functionalTable);
 
     refreshSimpleLookupTable(functionalModel, "functional_classes");
 
+    functionalL->addWidget(functionalTable);
+
     QHBoxLayout* functionalBtnL = new QHBoxLayout;
-    QPushButton* functionalAddBtn = new QPushButton("Add");
-    QPushButton* functionalEditBtn = new QPushButton("Edit");
-    QPushButton* functionalDelBtn = new QPushButton("Delete");
-    functionalBtnL->addWidget(functionalAddBtn);
-    functionalBtnL->addWidget(functionalEditBtn);
-    functionalBtnL->addWidget(functionalDelBtn);
+    QPushButton* fAddBtn = new QPushButton("Add");
+    QPushButton* fEditBtn = new QPushButton("Edit");
+    QPushButton* fArchiveBtn = new QPushButton("Archive / Unarchive");
+    functionalBtnL->addWidget(fAddBtn);
+    functionalBtnL->addWidget(fEditBtn);
+    functionalBtnL->addWidget(fArchiveBtn);
     functionalL->addLayout(functionalBtnL);
 
-    connect(functionalAddBtn, &QPushButton::clicked, this, [this, functionalModel]() {
+    connect(fAddBtn, &QPushButton::clicked, this, [this, functionalModel]() {
         showSimpleLookupDialog("Add Functional Class", functionalModel, "functional_classes");
     });
-    connect(functionalEditBtn, &QPushButton::clicked, this, [this, functionalTable, functionalModel]() {
+    connect(fEditBtn, &QPushButton::clicked, this, [this, functionalTable, functionalModel]() {
         QModelIndex idx = functionalTable->currentIndex();
         if (idx.isValid()) {
             int id = functionalModel->item(idx.row(), 0)->text().toInt();
             showSimpleLookupDialog("Edit Functional Class", functionalModel, "functional_classes", id);
         }
     });
-    connect(functionalDelBtn, &QPushButton::clicked, this, [this, functionalTable, functionalModel]() {
+    connect(fArchiveBtn, &QPushButton::clicked, this, [this, functionalTable, functionalModel]() {
         QModelIndex idx = functionalTable->currentIndex();
-        if (idx.isValid() && QMessageBox::question(this, "Delete", "Delete this functional class?") == QMessageBox::Yes) {
-            int id = functionalModel->item(idx.row(), 0)->text().toInt();
+        if (!idx.isValid()) return;
+
+        int id = functionalModel->item(idx.row(), 0)->text().toInt();
+        bool isArchived = functionalModel->item(idx.row(), 2)->text() == "Yes";
+
+        QString msg = isArchived ? "Unarchive this functional class?" : "Archive this functional class?";
+        if (QMessageBox::question(this, "Archive", msg) == QMessageBox::Yes) {
             QSqlQuery query(dbManager->db);
-            query.prepare("DELETE FROM functional_classes WHERE id = ?");
+            if (isArchived) {
+                query.prepare("UPDATE functional_classes SET archived = 0, archived_date = NULL WHERE id = ?");
+            } else {
+                query.prepare("UPDATE functional_classes SET archived = 1, archived_date = ? WHERE id = ?");
+                query.addBindValue(QDate::currentDate().toString(Qt::ISODate));
+            }
             query.addBindValue(id);
-            if (query.exec()) refreshSimpleLookupTable(functionalModel, "functional_classes");
+            if (query.exec()) {
+                refreshSimpleLookupTable(functionalModel, "functional_classes");
+            }
         }
     });
 
     tabs->addTab(functionalTab, "Functional Classes");
 
     layout->addWidget(tabs);
-    dlg.resize(1000, 650);
-
-    QDialogButtonBox* closeBox = new QDialogButtonBox(QDialogButtonBox::Close);
-    connect(closeBox, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
-    layout->addWidget(closeBox);
-
+    dlg.resize(1100, 700);
     dlg.exec();
 }
 
@@ -780,13 +837,17 @@ void MainWindow::showFundDialog(bool isEdit, int fundId, QStandardItemModel* mod
 
 void MainWindow::refreshFundTable(QStandardItemModel* model) {
     model->removeRows(0, model->rowCount());
-    QList<Fund> funds = dbManager->getAllFunds();
+
+    QList<Fund> funds = dbManager->getAllFunds(true);  // include archived
+
     for (const Fund& f : funds) {
         QList<QStandardItem*> row;
         row << new QStandardItem(QString::number(f.id))
             << new QStandardItem(f.name)
             << new QStandardItem(f.description)
-            << new QStandardItem(f.restriction_type == "WDR" ? "Yes" : "No");
+            << new QStandardItem(f.restriction_type == "WDR" ? "Yes" : "No")
+            << new QStandardItem(f.archived ? "Yes" : "No")
+            << new QStandardItem(f.archived_date);   // Archived Date
         model->appendRow(row);
     }
 }
@@ -917,7 +978,9 @@ void MainWindow::showAccountDialog(bool isEdit, int accountId, QStandardItemMode
 
 void MainWindow::refreshAccountsTable(QStandardItemModel* model) {
     model->removeRows(0, model->rowCount());
-    QList<Account> accounts = dbManager->getAllAccounts();
+
+    QList<Account> accounts = dbManager->getAllAccounts(true);
+
     for (const Account& a : accounts) {
         QString fundName = (a.fundId > 0) ? dbManager->getFundName(a.fundId) : "(None)";
 
@@ -926,7 +989,9 @@ void MainWindow::refreshAccountsTable(QStandardItemModel* model) {
             << new QStandardItem(a.code)
             << new QStandardItem(a.name)
             << new QStandardItem(a.type)
-            << new QStandardItem(fundName);
+            << new QStandardItem(fundName)
+            << new QStandardItem(a.archived ? "Yes" : "No")
+            << new QStandardItem(a.archived_date);   // Archived Date
         model->appendRow(row);
     }
 }
@@ -968,7 +1033,7 @@ void MainWindow::refreshAll() {
 void MainWindow::populateFundsCombo(QComboBox* combo) {
     combo->clear();
     combo->addItem("", QVariant());   // default blank option (null fund_id)
-    auto funds = dbManager->getAllFunds();
+    auto funds = dbManager->getAllFunds(false);
     qDebug() << "Populating" << funds.size() << "funds in dropdown";
     for (const auto& f : funds) {
         combo->addItem(f.name, f.id);
@@ -976,7 +1041,7 @@ void MainWindow::populateFundsCombo(QComboBox* combo) {
 }
 
 QString MainWindow::getFundName(int fundId) const {
-    auto funds = dbManager->getAllFunds();
+    auto funds = dbManager->getAllFunds(false);
     for (const auto& f : funds) {
         if (f.id == fundId) return f.name;
     }
@@ -1024,12 +1089,20 @@ void MainWindow::showSimpleLookupDialog(const QString& title, QStandardItemModel
 
 void MainWindow::refreshSimpleLookupTable(QStandardItemModel* model, const QString& tableName) {
     model->removeRows(0, model->rowCount());
-    QSqlQuery query(dbManager->db);
-    query.exec(QString("SELECT id, name FROM %1").arg(tableName));
-    while (query.next()) {
+
+    QList<SimpleLookup> list;
+    if (tableName == "natural_classes") {
+        list = dbManager->getAllNaturalClasses(true);
+    } else if (tableName == "functional_classes") {
+        list = dbManager->getAllFunctionalClasses(true);
+    }
+
+    for (const SimpleLookup& s : list) {
         QList<QStandardItem*> row;
-        row << new QStandardItem(QString::number(query.value(0).toInt()))
-            << new QStandardItem(query.value(1).toString());
+        row << new QStandardItem(QString::number(s.id))
+            << new QStandardItem(s.name)
+            << new QStandardItem(s.archived ? "Yes" : "No")
+            << new QStandardItem(s.archived_date);
         model->appendRow(row);
     }
 }
@@ -1128,8 +1201,7 @@ void MainWindow::loadTransactions() {
     }
 }
 
-void MainWindow::onTransactionSelected(int row)
-{
+void MainWindow::onTransactionSelected(int row) {
     if (!txListTable || row < 0) return;
 
     qlonglong txId = txListTable->item(row, 0) ? 
@@ -1253,8 +1325,7 @@ void MainWindow::setupFundsBalancesPage() {
     stack->insertWidget(4, page);   // Insert at index 4 (after Transactions)
 }
 
-void MainWindow::loadFundBalances()
-{
+void MainWindow::loadFundBalances() {
     if (!fundBalancesTable) return;
     fundBalancesTable->setRowCount(0);
 

@@ -2,6 +2,11 @@
 #include <QSqlError>
 #include <QDebug>
 #include <QDate>
+#include <QDir>
+#include <QFile>
+#include <QFileInfo>
+#include <QDesktopServices>
+#include <QUrl>
 
 DbManager::DbManager(QObject* parent) : QObject(parent) {
     db = QSqlDatabase::addDatabase("QSQLITE");
@@ -30,20 +35,40 @@ void DbManager::createTables() {
         id INTEGER PRIMARY KEY,
         name TEXT NOT NULL UNIQUE,
         description TEXT,
-        restriction_type TEXT CHECK(restriction_type IN ('WODR','WDR')) NOT NULL
+        restriction_type TEXT CHECK(restriction_type IN ('WODR','WDR')) NOT NULL,
+        archived INTEGER DEFAULT 0,
+        archived_date TEXT
     );)");
 
-    // Chart of Accounts
+    // Accounts
     query.exec(R"(CREATE TABLE IF NOT EXISTS accounts (
         id INTEGER PRIMARY KEY,
         code TEXT UNIQUE NOT NULL,
         name TEXT NOT NULL,
         type TEXT NOT NULL,
         fund_id INTEGER REFERENCES funds(id),
+        archived INTEGER DEFAULT 0,
+        archived_date TEXT,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );)");
 
-    // Transactions Header
+    // Natural Classes
+    query.exec(R"(CREATE TABLE IF NOT EXISTS natural_classes (
+        id INTEGER PRIMARY KEY,
+        name TEXT NOT NULL UNIQUE,
+        archived INTEGER DEFAULT 0,
+        archived_date TEXT
+    );)");
+
+    // Functional Classes
+    query.exec(R"(CREATE TABLE IF NOT EXISTS functional_classes (
+        id INTEGER PRIMARY KEY,
+        name TEXT NOT NULL UNIQUE,
+        archived INTEGER DEFAULT 0,
+        archived_date TEXT
+    );)");
+
+// Transactions Header
     query.exec(R"(CREATE TABLE IF NOT EXISTS transactions (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         date TEXT NOT NULL,
@@ -58,13 +83,14 @@ void DbManager::createTables() {
         cleared_date TEXT,
         reconciled INTEGER DEFAULT 0,
         reconciled_date TEXT,
+        attachment_path TEXT,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );)");
 
     // Transaction Lines
     query.exec(R"(CREATE TABLE IF NOT EXISTS transaction_lines (
         id INTEGER PRIMARY KEY,
-        transaction_id TEXT REFERENCES transactions(id) ON DELETE CASCADE,
+        transaction_id INTEGER REFERENCES transactions(id) ON DELETE CASCADE,
         account_id INTEGER REFERENCES accounts(id),
         fund_id INTEGER REFERENCES funds(id),
         amount REAL NOT NULL,
@@ -72,20 +98,8 @@ void DbManager::createTables() {
         functional_class TEXT,
         notes TEXT
     );)");
-    
-    // Natural Classes
-        query.exec(R"(CREATE TABLE IF NOT EXISTS natural_classes (
-        id INTEGER PRIMARY KEY,
-        name TEXT NOT NULL UNIQUE
-    );)");
 
-    // Functional Classes
-    query.exec(R"(CREATE TABLE IF NOT EXISTS functional_classes (
-        id INTEGER PRIMARY KEY,
-        name TEXT NOT NULL UNIQUE
-    );)");
-
-    qDebug() << "✅ All tables created/validated with updated schema";
+    qDebug() << "✅ All tables created/validated with archive flags";
 }
 
 QString DbManager::generateNextTransactionId() const {
@@ -101,27 +115,6 @@ QString DbManager::generateNextTransactionId() const {
         return yearPrefix + QString("%1").arg(seq, 4, 10, QChar('0'));
     }
     return yearPrefix + "0001";
-}
-
-QList<Fund> DbManager::getAllFunds() const {
-    QList<Fund> funds;
-    QSqlQuery query(db);
-    query.exec(R"(
-        SELECT id, name, description, restriction_type 
-        FROM funds 
-        ORDER BY name
-    )");
-
-    while (query.next()) {
-        Fund f;
-        f.id               = query.value(0).toInt();
-        f.name             = query.value(1).toString();
-        f.description      = query.value(2).toString();
-        f.restriction_type = query.value(3).toString();
-        funds.append(f);
-    }
-
-    return funds;
 }
 
 QList<Transaction> DbManager::getAllTransactions() const {
@@ -175,22 +168,6 @@ double DbManager::getWDRTotal() const {
     return (query.exec() && query.next()) ? query.value(0).toDouble() : 0.0;
 }
 
-QList<Account> DbManager::getAllAccounts() const {
-    QList<Account> accounts;
-    QSqlQuery query(db);
-    query.exec("SELECT id, code, name, type, fund_id FROM accounts");
-    while (query.next()) {
-        Account a;
-        a.id = query.value(0).toInt();
-        a.code = query.value(1).toString();
-        a.name = query.value(2).toString();
-        a.type = query.value(3).toString();
-        a.fundId = query.value(4).toInt();
-        accounts.append(a);
-    }
-    return accounts;
-}
-
 QString DbManager::getFundName(int fundId) const {
     QSqlQuery query(db);
     query.prepare("SELECT name FROM funds WHERE id = ?");
@@ -199,32 +176,6 @@ QString DbManager::getFundName(int fundId) const {
         return query.value(0).toString();
     }
     return "(None)";
-}
-
-QList<SimpleLookup> DbManager::getAllNaturalClasses() const {
-    QList<SimpleLookup> list;
-    QSqlQuery query(db);
-    query.exec("SELECT id, name FROM natural_classes");
-    while (query.next()) {
-        SimpleLookup s;
-        s.id = query.value(0).toInt();
-        s.name = query.value(1).toString();
-        list.append(s);
-    }
-    return list;
-}
-
-QList<SimpleLookup> DbManager::getAllFunctionalClasses() const {
-    QList<SimpleLookup> list;
-    QSqlQuery query(db);
-    query.exec("SELECT id, name FROM functional_classes");
-    while (query.next()) {
-        SimpleLookup s;
-        s.id = query.value(0).toInt();
-        s.name = query.value(1).toString();
-        list.append(s);
-    }
-    return list;
 }
 
 void DbManager::seedDefaultLookups() {
@@ -276,4 +227,162 @@ void DbManager::seedDefaultLookups() {
         q.exec("INSERT INTO functional_classes (name) VALUES ('Fundraising')");
     }
     qDebug() << "Initial Functional seeded.";
+}
+
+QList<Fund> DbManager::getAllFunds(bool includeArchived) const {
+    QList<Fund> funds;
+    QSqlQuery query(db);
+    
+    QString sql = R"(
+        SELECT id, name, description, restriction_type, archived, archived_date 
+        FROM funds 
+        WHERE 1=1
+    )";
+    if (!includeArchived) {
+        sql += " AND archived = 0";
+    }
+    sql += " ORDER BY name";
+
+    query.exec(sql);
+
+    while (query.next()) {
+        Fund f;
+        f.id               = query.value(0).toInt();
+        f.name             = query.value(1).toString();
+        f.description      = query.value(2).toString();
+        f.restriction_type = query.value(3).toString();
+        f.archived         = query.value(4).toInt() != 0;
+        f.archived_date    = query.value(5).toString();
+        funds.append(f);
+    }
+    return funds;
+}
+
+QList<Account> DbManager::getAllAccounts(bool includeArchived) const {
+    QList<Account> accounts;
+    QSqlQuery query(db);
+    
+    QString sql = R"(
+        SELECT id, code, name, type, fund_id, archived, archived_date 
+        FROM accounts 
+        WHERE 1=1
+    )";
+    if (!includeArchived) {
+        sql += " AND archived = 0";
+    }
+    sql += " ORDER BY code";
+
+    query.exec(sql);
+
+    while (query.next()) {
+        Account a;
+        a.id            = query.value(0).toInt();
+        a.code          = query.value(1).toString();
+        a.name          = query.value(2).toString();
+        a.type          = query.value(3).toString();
+        a.fundId        = query.value(4).toInt();
+        a.archived      = query.value(5).toInt() != 0;
+        a.archived_date = query.value(6).toString();
+        accounts.append(a);
+    }
+    return accounts;
+}
+
+QList<SimpleLookup> DbManager::getAllNaturalClasses(bool includeArchived) const {
+    QList<SimpleLookup> list;
+    QSqlQuery query(db);
+    
+    QString sql = R"(
+        SELECT id, name, archived, archived_date 
+        FROM natural_classes 
+        WHERE 1=1
+    )";
+    if (!includeArchived) {
+        sql += " AND archived = 0";
+    }
+    sql += " ORDER BY name";
+
+    query.exec(sql);
+
+    while (query.next()) {
+        SimpleLookup s;
+        s.id            = query.value(0).toInt();
+        s.name          = query.value(1).toString();
+        s.archived      = query.value(2).toInt() != 0;
+        s.archived_date = query.value(3).toString();
+        list.append(s);
+    }
+    return list;
+}
+
+QList<SimpleLookup> DbManager::getAllFunctionalClasses(bool includeArchived) const {
+    QList<SimpleLookup> list;
+    QSqlQuery query(db);
+    
+    QString sql = R"(
+        SELECT id, name, archived, archived_date 
+        FROM functional_classes 
+        WHERE 1=1
+    )";
+    if (!includeArchived) {
+        sql += " AND archived = 0";
+    }
+    sql += " ORDER BY name";
+
+    query.exec(sql);
+
+    while (query.next()) {
+        SimpleLookup s;
+        s.id            = query.value(0).toInt();
+        s.name          = query.value(1).toString();
+        s.archived      = query.value(2).toInt() != 0;
+        s.archived_date = query.value(3).toString();
+        list.append(s);
+    }
+    return list;
+}
+
+bool DbManager::saveAttachment(int transactionId, const QString& sourceFilePath) {
+    if (sourceFilePath.isEmpty()) return false;
+
+    QDir attachmentsDir("attachments/transactions");
+    if (!attachmentsDir.exists()) {
+        attachmentsDir.mkpath(".");
+    }
+
+    QString fileName = QString("TX_%1_%2").arg(transactionId)
+                       .arg(QFileInfo(sourceFilePath).fileName());
+
+    QString destPath = attachmentsDir.absoluteFilePath(fileName);
+
+    if (QFile::copy(sourceFilePath, destPath)) {
+        QSqlQuery query(db);
+        query.prepare("UPDATE transactions SET attachment_path = ? WHERE id = ?");
+        query.addBindValue("attachments/transactions/" + fileName);
+        query.addBindValue(transactionId);
+        return query.exec();
+    }
+    return false;
+}
+
+QString DbManager::getAttachmentPath(int transactionId) const {
+    QSqlQuery query(db);
+    query.prepare("SELECT attachment_path FROM transactions WHERE id = ?");
+    query.addBindValue(transactionId);
+    if (query.exec() && query.next()) {
+        return query.value(0).toString();
+    }
+    return QString();
+}
+
+bool DbManager::openAttachment(int transactionId) const {
+    QString path = getAttachmentPath(transactionId);
+    if (path.isEmpty()) return false;
+
+    QFile file(path);
+    if (file.exists()) {
+        QDesktopServices::openUrl(QUrl::fromLocalFile(path));
+        return true;
+    }
+    return false;
 }
