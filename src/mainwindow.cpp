@@ -40,6 +40,13 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
 MainWindow::~MainWindow() {}
 
 void MainWindow::setupUI() {
+    // Theme Color Definitions
+    // Default dark theme colors
+    colorNormalEven    = QColor(45, 45, 48);      // Slightly darker
+    colorNormalOdd     = QColor(35, 35, 38);
+    colorCleared       = QColor(30, 55, 40);      // Subtle green
+    colorReconciled    = QColor(25, 45, 70);      // Subtle blue
+
     auto* central = new QWidget;
     auto* mainLayout = new QHBoxLayout(central);
     mainLayout->setContentsMargins(0, 0, 0, 0);
@@ -54,11 +61,11 @@ void MainWindow::setupUI() {
     )");
 
     // Sidebar items - exact order you want
-    sidebar->addItem("Dashboard");        // index 0
-    sidebar->addItem("New Transaction");  // index 1
-    sidebar->addItem("Manage Lookups");   // index 2
-    sidebar->addItem("Transactions");     // index 3
-    sidebar->addItem("Funds");            // index 4
+    sidebar->addItem("Dashboard");     // 0
+    sidebar->addItem("Ledger");        // 1
+    sidebar->addItem("Funds");         // 2
+    sidebar->addItem("Reports");       // 3
+    sidebar->addItem("Setup");         // 4
 
     connect(sidebar, &QListWidget::currentRowChanged, this, &MainWindow::switchPage);
 
@@ -109,38 +116,53 @@ void MainWindow::setupUI() {
     sidebar->setCurrentRow(0);
 
     // ====================== FINAL SETUP ======================
-    setupTransactionsPage();    // Insert at index 3
+    // Clear any old pages after Dashboard to prevent index drift
+    while (stack->count() > 1) {
+        QWidget* w = stack->widget(1);
+        stack->removeWidget(w);
+        w->deleteLater();
+    }
+
+    setupTransactionsPage();       // Ledger → index 1
     loadTransactions();
 
-    setupFundsBalancesPage();   // Insert at index 4
+    setupFundsBalancesPage();      // Funds → index 2
     loadFundBalances();
+
+    // Reports placeholder → index 3
+    QWidget* reportsPage = new QWidget;
+    QVBoxLayout* repL = new QVBoxLayout(reportsPage);
+    repL->addWidget(new QLabel("Reports coming soon...\n\nThis page will contain budget vs actual, fund activity, etc."));
+    stack->addWidget(reportsPage);
+
+    setupManageLookupsPage();      // Setup → index 4
+
+    sidebar->setCurrentRow(0);
 }
 
 void MainWindow::switchPage(int index) {
     stack->setCurrentIndex(index);
 
-    if (index == 1) {           // New Transaction
-        onNewTransaction();
-        sidebar->setCurrentRow(0);
+    if (index == PAGE_LEDGER) {           // 1
+        loadTransactions();
     } 
-    else if (index == 2) {      // Manage Lookups
-        onManageLookups();
-        sidebar->setCurrentRow(0);
+    else if (index == PAGE_FUNDS) {       // 2
+        loadFundBalances();
+    } 
+    else if (index == PAGE_SETUP) {       // 4
+        // Setup page - no special load needed
     }
-    else if (index == 3) {      // Transactions Ledger
-        loadTransactions();     // Refresh the list when we switch to it
-        // sidebar->setCurrentRow(0);  // optional
-    }
-    else if (index == 4) {           // Now Funds Balances
-    loadFundBalances();
-    }
+    // Reports (index 3) needs no load for now
 }
 
-void MainWindow::onNewTransaction() {
-    qDebug() << "New Transaction Dialog opened";
+void MainWindow::onNewTransaction(int editTxId /* = 0 */) {
+    bool isEditMode = (editTxId > 0);
+    bool isLocked = false;
+
+    qDebug() << (isEditMode ? "Editing transaction" : "New Transaction") << editTxId;
 
     QDialog dlg(this);
-    dlg.setWindowTitle("New Transaction - Hope Baptist Church");
+    dlg.setWindowTitle(isEditMode ? "Edit Transaction" : "New Transaction");
     dlg.resize(1280, 680);
     dlg.setMinimumSize(1280, 680);
 
@@ -156,6 +178,7 @@ void MainWindow::onNewTransaction() {
     QLineEdit* descEdit = new QLineEdit;
     QLineEdit* payeeEdit = new QLineEdit;
     QLineEdit* approvedEdit = new QLineEdit;
+    QLineEdit* memoEdit = new QLineEdit;
 
     left->addRow("Date", dateEdit);
     left->addRow("Description", descEdit);
@@ -174,6 +197,7 @@ void MainWindow::onNewTransaction() {
     right->addRow("Reference #", refEdit);
     right->addRow("Status", statusCombo);
     right->addRow("", attachBtn);   // Attachment button
+    right->addRow("Memo:", memoEdit);
     headerL->addLayout(right);
     mainL->addLayout(headerL);
 
@@ -181,7 +205,7 @@ void MainWindow::onNewTransaction() {
     QTableWidget* txTable = new QTableWidget(0, 9);
     txTable->setHorizontalHeaderLabels({
         "Line", "Account", "Fund", "Type", "Natural Class",
-        "Functional Class", "Memo/Note", "Debit", "Credit"
+        "Functional Class", "Note", "Debit", "Credit"
     });
     txTable->setAlternatingRowColors(true);
     txTable->horizontalHeader()->setStretchLastSection(false);
@@ -219,6 +243,42 @@ void MainWindow::onNewTransaction() {
         reconcileLabel->setStyleSheet(qAbs(diff) < 0.01 ?
             "color: green; font-weight: bold;" : "color: red; font-weight: bold;");
     };
+
+    // ====================== LOAD EXISTING TRANSACTION IF EDITING ======================
+    if (isEditMode) {
+        // Load header
+        QSqlQuery headerQ(dbManager->db);
+        headerQ.prepare("SELECT date, description, payee_donor, reference, approved_by, memo, "
+                        "cleared, reconciled FROM transactions WHERE id = ?");
+        headerQ.addBindValue(editTxId);
+        if (headerQ.exec() && headerQ.next()) {
+            dateEdit->setDate(QDate::fromString(headerQ.value("date").toString(), Qt::ISODate));
+            descEdit->setText(headerQ.value("description").toString());
+            payeeEdit->setText(headerQ.value("payee_donor").toString());
+            refEdit->setText(headerQ.value("reference").toString());
+            approvedEdit->setText(headerQ.value("approved_by").toString());
+            memoEdit->setText(headerQ.value("memo").toString());
+
+            bool cleared = headerQ.value("cleared").toInt() != 0;
+            bool reconciled = headerQ.value("reconciled").toInt() != 0;
+            isLocked = cleared || reconciled;
+
+            if (isLocked) {
+                dlg.setWindowTitle("View Locked Transaction #" + QString::number(editTxId));
+                // Make header fields read-only
+                dateEdit->setEnabled(false);
+                descEdit->setReadOnly(true);
+                payeeEdit->setReadOnly(true);
+                refEdit->setReadOnly(true);
+                approvedEdit->setReadOnly(true);
+                memoEdit->setReadOnly(true);
+                statusCombo->setEnabled(false);
+                attachBtn->setEnabled(false);
+            }
+        }
+
+        // TODO: Load lines into txTable (next step)
+    }
 
     // ====================== ATTACH BUTTON ======================
     connect(attachBtn, &QPushButton::clicked, this, [&]() {
@@ -310,13 +370,35 @@ void MainWindow::onNewTransaction() {
             continue;
         }
 
-        double debits = 0.0, credits = 0.0;
+        // ====================== VALIDATION ======================
+        int validLines = 0;
+        double debits = 0.0;
+        double credits = 0.0;
+
         for (int r = 0; r < txTable->rowCount(); ++r) {
-            debits += txTable->item(r, 7) ? txTable->item(r, 7)->text().toDouble() : 0.0;
-            credits += txTable->item(r, 8) ? txTable->item(r, 8)->text().toDouble() : 0.0;
+            QComboBox* acctCombo = qobject_cast<QComboBox*>(txTable->cellWidget(r, 1));
+            if (!acctCombo || acctCombo->currentIndex() <= 0) continue;
+
+            double debit  = txTable->item(r, 7) ? txTable->item(r, 7)->text().toDouble() : 0.0;
+            double credit = txTable->item(r, 8) ? txTable->item(r, 8)->text().toDouble() : 0.0;
+
+            if (debit > 0.0 || credit > 0.0) {
+                validLines++;
+                debits += debit;
+                credits += credit;
+            }
         }
+
+        if (validLines < 2) {
+            QMessageBox::warning(this, "Invalid Transaction", 
+                "A transaction must have at least two detail lines (debit + credit).");
+            continue;
+        }
+
         if (qAbs(debits - credits) > 0.01) {
-            QMessageBox::warning(this, "Unbalanced", "Debits must equal Credits.");
+            QMessageBox::warning(this, "Unbalanced", 
+                QString("Transaction is unbalanced.\nDebits: $%1\nCredits: $%2")
+                    .arg(debits, 0, 'f', 2).arg(credits, 0, 'f', 2));
             continue;
         }
 
@@ -338,13 +420,14 @@ void MainWindow::onNewTransaction() {
         QSqlQuery header(dbManager->db);
         header.prepare(R"(
             INSERT INTO transactions 
-            (date, description, total_amount, payee_donor, reference, approved_by, attachment_path)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            (date, description, total_amount, memo, payee_donor, reference, approved_by, attachment_path)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         )");
 
         header.addBindValue(dateEdit->date().toString(Qt::ISODate));
         header.addBindValue(descEdit->text().trimmed());
         header.addBindValue(debits);
+        header.addBindValue(memoEdit->text().trimmed());
         header.addBindValue(payeeEdit->text().trimmed());
         header.addBindValue(userReference);
         header.addBindValue(approvedEdit->text().trimmed());
@@ -410,7 +493,7 @@ void MainWindow::onNewTransaction() {
 
             double debitAmt = txTable->item(r, 7) ? txTable->item(r, 7)->text().toDouble() : 0.0;
             double creditAmt = txTable->item(r, 8) ? txTable->item(r, 8)->text().toDouble() : 0.0;
-            QString memo = txTable->item(r, 6) ? txTable->item(r, 6)->text().trimmed() : "";
+            QString notes = txTable->item(r, 6) ? txTable->item(r, 6)->text().trimmed() : "";
 
             double finalAmount = debitAmt - creditAmt;
 
@@ -427,7 +510,7 @@ void MainWindow::onNewTransaction() {
             line.addBindValue(finalAmount);
             line.addBindValue(nat);
             line.addBindValue(func);
-            line.addBindValue(memo);
+            line.addBindValue(notes);
 
             if (line.exec()) {
                 linesSaved++;
@@ -449,11 +532,13 @@ void MainWindow::onNewTransaction() {
             continue;
         }
 
-        QMessageBox::information(this, "✅ Success",
+        // ====================== SUCCESS ======================
+        QMessageBox::information(this, "✅ Success", 
             QString("Transaction saved!\n\nID: %1\nReference: %2\nLines saved: %3")
                 .arg(QString::number(txId), userReference, QString::number(linesSaved)));
 
-        refreshAll();
+        refreshAll();   // This should now properly refresh the Ledger
+
         break;
     }
 }
@@ -997,37 +1082,15 @@ void MainWindow::refreshAccountsTable(QStandardItemModel* model) {
 }
 
 void MainWindow::refreshAll() {
-    double wodr = dbManager->getWODRTotal();
-    double wdr  = dbManager->getWDRTotal();
-    wodrLabel->setText(QString("$%1").arg(wodr, 0, 'f', 2));
-    wdrLabel->setText(QString("$%1").arg(wdr, 0, 'f', 2));
-    totalLabel->setText(QString("$%1").arg(wodr + wdr, 0, 'f', 2));
-
-    auto txs = dbManager->getAllTransactions();
-    QStandardItemModel* model = new QStandardItemModel(this);
-    model->setHorizontalHeaderLabels({"Date", "Description", "Amount", "Fund", "Natural", "Functional", "Type"});
-
-    for (int i = 0; i < qMin(15, txs.size()); ++i) {
-        const auto& t = txs[i];
-
-        QString fundName = (t.fundId > 0) 
-            ? getFundName(t.fundId) 
-            : "";                     // Blank for no fund
-
-        QList<QStandardItem*> row;
-        row << new QStandardItem(t.date.toString("yyyy-MM-dd"))
-            << new QStandardItem(t.description)
-            << new QStandardItem(QString("$%1").arg(t.amount, 0, 'f', 2))
-            << new QStandardItem(fundName)           // ← Fixed
-            << new QStandardItem(t.naturalClass)
-            << new QStandardItem(t.functionalClass)
-            << new QStandardItem(t.transactionType);
-
-        model->appendRow(row);
+    // Refresh main Ledger
+    if (txListTable) {
+        loadTransactions();
     }
 
-    recentTxTable->setModel(model);
-    recentTxTable->resizeColumnsToContents();
+    // Refresh Funds page
+    loadFundBalances();
+
+    qDebug() << "✅ refreshAll() completed - Ledger and Funds updated";
 }
 
 void MainWindow::populateFundsCombo(QComboBox* combo) {
@@ -1107,100 +1170,6 @@ void MainWindow::refreshSimpleLookupTable(QStandardItemModel* model, const QStri
     }
 }
 
-void MainWindow::setupTransactionsPage() {
-    QWidget* page = new QWidget;
-    QVBoxLayout* mainLayout = new QVBoxLayout(page);
-    mainLayout->setContentsMargins(12, 12, 12, 12);
-    mainLayout->setSpacing(8);
-
-    QLabel* title = new QLabel("Transaction Ledger");
-    QFont titleFont = title->font();
-    titleFont.setPointSize(16);
-    titleFont.setBold(true);
-    title->setFont(titleFont);
-    mainLayout->addWidget(title);
-
-    // Main list - simple version
-    txListTable = new QTableWidget(0, 6);
-    txListTable->setHorizontalHeaderLabels({
-        "ID", "Date", "Reference", "Description", "Total", "Status"
-    });
-    txListTable->setAlternatingRowColors(true);
-    txListTable->setSelectionBehavior(QAbstractItemView::SelectRows);
-    txListTable->setSelectionMode(QAbstractItemView::SingleSelection);
-    txListTable->horizontalHeader()->setStretchLastSection(true);
-
-    txListTable->setColumnWidth(0, 60);
-    txListTable->setColumnWidth(1, 100);
-    txListTable->setColumnWidth(2, 130);
-    txListTable->setColumnWidth(4, 110);
-
-    mainLayout->addWidget(txListTable, 2);
-
-    // Details
-    QGroupBox* detailsGroup = new QGroupBox("Transaction Details");
-    QVBoxLayout* detailsVL = new QVBoxLayout(detailsGroup);
-
-    txDetailsLabel = new QLabel("Select a transaction to view line items");
-    txDetailsLabel->setWordWrap(true);
-    detailsVL->addWidget(txDetailsLabel);
-
-    txDetailsTable = new QTableWidget(0, 6);
-    txDetailsTable->setHorizontalHeaderLabels({
-        "Fund", "Account", "Amount", "Natural Class", "Functional Class", "Memo"
-    });
-    txDetailsTable->horizontalHeader()->setStretchLastSection(true);
-    detailsVL->addWidget(txDetailsTable);
-
-    mainLayout->addWidget(detailsGroup, 1);
-
-    connect(txListTable, &QTableWidget::itemSelectionChanged, this, [this]() {
-        int row = txListTable->currentRow();
-        if (row >= 0) onTransactionSelected(row);
-    });
-
-    stack->insertWidget(3, page);
-}
-
-void MainWindow::loadTransactions() {
-    if (!txListTable) return;
-    txListTable->setRowCount(0);
-
-    QSqlQuery q(dbManager->db);
-    q.exec(R"(
-        SELECT id, date, reference, description, total_amount,
-               CASE 
-                   WHEN reconciled = 1 THEN 'R - Reconciled'
-                   WHEN cleared = 1 THEN 'C - Cleared'
-                   ELSE 'Pending' 
-               END as status
-        FROM transactions 
-        ORDER BY date DESC, id DESC
-    )");
-
-    while (q.next()) {
-        int row = txListTable->rowCount();
-        txListTable->insertRow(row);
-
-        qlonglong txId = q.value("id").toLongLong();
-
-        QTableWidgetItem* idItem = new QTableWidgetItem(QString::number(txId));
-        idItem->setData(Qt::UserRole, txId);
-        txListTable->setItem(row, 0, idItem);
-
-        txListTable->setItem(row, 1, new QTableWidgetItem(q.value("date").toString()));
-        txListTable->setItem(row, 2, new QTableWidgetItem(q.value("reference").toString()));
-        txListTable->setItem(row, 3, new QTableWidgetItem(q.value("description").toString()));
-
-        double total = q.value("total_amount").toDouble();
-        QTableWidgetItem* totalItem = new QTableWidgetItem(QString::number(total, 'f', 2));
-        totalItem->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
-        txListTable->setItem(row, 4, totalItem);
-
-        txListTable->setItem(row, 5, new QTableWidgetItem(q.value("status").toString()));
-    }
-}
-
 void MainWindow::onTransactionSelected(int row) {
     if (!txListTable || row < 0) return;
 
@@ -1272,6 +1241,8 @@ void MainWindow::onTransactionSelected(int row) {
     qDebug() << "=== Loaded details for tx" << txId << "- rows:" << txDetailsTable->rowCount() << "===";
 }
 
+// ======================= PAGE SETUP/LOADING ==================
+
 void MainWindow::setupFundsBalancesPage() {
     QWidget* page = new QWidget;
     QVBoxLayout* mainL = new QVBoxLayout(page);
@@ -1285,44 +1256,26 @@ void MainWindow::setupFundsBalancesPage() {
     title->setFont(titleFont);
     mainL->addWidget(title);
 
-    // Summary totals
-    QHBoxLayout* summaryL = new QHBoxLayout;
     QGroupBox* summaryBox = new QGroupBox("Net Assets Summary");
     QFormLayout* form = new QFormLayout(summaryBox);
-
     totalWODRLabel = new QLabel("$0.00");
     totalWDRLabel  = new QLabel("$0.00");
     grandTotalLabel = new QLabel("$0.00");
 
-    totalWODRLabel->setStyleSheet("font-size: 18px; font-weight: bold; color: #2ecc71;");
-    totalWDRLabel->setStyleSheet("font-size: 18px; font-weight: bold; color: #e67e22;");
-    grandTotalLabel->setStyleSheet("font-size: 20px; font-weight: bold;");
-
     form->addRow("Without Donor Restrictions (WODR):", totalWODRLabel);
     form->addRow("With Donor Restrictions (WDR):", totalWDRLabel);
     form->addRow("Total Net Assets:", grandTotalLabel);
+    mainL->addWidget(summaryBox);
 
-    summaryL->addWidget(summaryBox);
-    mainL->addLayout(summaryL);
-
-    // Funds Table
     fundBalancesTable = new QTableWidget(0, 4);
-    fundBalancesTable->setHorizontalHeaderLabels({
-        "Fund", "Restriction Type", "Balance", "Notes"
-    });
-    fundBalancesTable->setAlternatingRowColors(true);
-    fundBalancesTable->horizontalHeader()->setStretchLastSection(true);
-    fundBalancesTable->setColumnWidth(0, 220);
-    fundBalancesTable->setColumnWidth(1, 140);
-    fundBalancesTable->setColumnWidth(2, 140);
-
+    fundBalancesTable->setHorizontalHeaderLabels({"Fund", "Restriction Type", "Balance", "Notes"});
     mainL->addWidget(fundBalancesTable, 1);
 
     QPushButton* refreshBtn = new QPushButton("↻ Refresh Balances");
     connect(refreshBtn, &QPushButton::clicked, this, &MainWindow::loadFundBalances);
     mainL->addWidget(refreshBtn);
 
-    stack->insertWidget(4, page);   // Insert at index 4 (after Transactions)
+    stack->addWidget(page);   // No hardcoded index
 }
 
 void MainWindow::loadFundBalances() {
@@ -1381,6 +1334,459 @@ void MainWindow::loadFundBalances() {
     grandTotalLabel->setText(QString("$%1").arg(grandTotal, 0, 'f', 2));
 
     qDebug() << "Fund Balances refreshed - WODR:" << totalWODR << "WDR:" << totalWDR;
+}
+
+void MainWindow::setupManageLookupsPage() {
+    QWidget* page = new QWidget;
+    QVBoxLayout* mainL = new QVBoxLayout(page);
+    mainL->setContentsMargins(24, 24, 24, 24);
+    mainL->setSpacing(16);
+
+    QLabel* title = new QLabel("Setup & Lookups");
+    QFont titleFont = title->font();
+    titleFont.setPointSize(16);
+    titleFont.setBold(true);
+    title->setFont(titleFont);
+    mainL->addWidget(title);
+
+    QTabWidget* tabs = new QTabWidget;
+
+    // ====================== FUNDS TAB ======================
+    QWidget* fundsTab = new QWidget;
+    QVBoxLayout* fundsL = new QVBoxLayout(fundsTab);
+
+    QTableView* fundsTable = new QTableView;
+    QStandardItemModel* fundsModel = new QStandardItemModel(this);
+    fundsModel->setHorizontalHeaderLabels({"ID", "Name", "Description", "Restricted", "Archived", "Archived Date"});
+    fundsTable->setModel(fundsModel);
+
+    refreshFundTable(fundsModel);
+
+    fundsTable->resizeColumnsToContents();
+    fundsTable->horizontalHeader()->setStretchLastSection(true);
+    fundsTable->setColumnWidth(0, 60);
+    fundsTable->setColumnWidth(1, 180);
+    fundsTable->setColumnWidth(2, 300);
+    fundsTable->setColumnWidth(3, 100);
+    fundsTable->setColumnWidth(4, 80);
+    fundsTable->setColumnWidth(5, 140);
+
+    fundsL->addWidget(fundsTable);
+
+    QHBoxLayout* fundsBtnL = new QHBoxLayout;
+    QPushButton* fAdd = new QPushButton("Add");
+    QPushButton* fEdit = new QPushButton("Edit");
+    QPushButton* fArchive = new QPushButton("Archive / Unarchive");
+    fundsBtnL->addWidget(fAdd);
+    fundsBtnL->addWidget(fEdit);
+    fundsBtnL->addWidget(fArchive);
+    fundsL->addLayout(fundsBtnL);
+
+    connect(fAdd, &QPushButton::clicked, this, [this, fundsModel]() { 
+        showFundDialog(false, -1, fundsModel); 
+    });
+    connect(fEdit, &QPushButton::clicked, this, [this, fundsTable, fundsModel]() {
+        QModelIndex idx = fundsTable->currentIndex();
+        if (idx.isValid()) {
+            int fundId = fundsModel->item(idx.row(), 0)->text().toInt();
+            showFundDialog(true, fundId, fundsModel);
+        }
+    });
+    connect(fArchive, &QPushButton::clicked, this, [this, fundsTable, fundsModel]() {
+        QModelIndex idx = fundsTable->currentIndex();
+        if (!idx.isValid()) return;
+
+        int fundId = fundsModel->item(idx.row(), 0)->text().toInt();
+        bool isArchived = fundsModel->item(idx.row(), 4)->text() == "Yes";
+
+        QString msg = isArchived ? "Unarchive this fund?" : "Archive this fund? It will be hidden from dropdowns.";
+        if (QMessageBox::question(this, "Archive Fund", msg) == QMessageBox::Yes) {
+            QSqlQuery query(dbManager->db);
+            if (isArchived) {
+                query.prepare("UPDATE funds SET archived = 0, archived_date = NULL WHERE id = ?");
+            } else {
+                query.prepare("UPDATE funds SET archived = 1, archived_date = ? WHERE id = ?");
+                query.addBindValue(QDate::currentDate().toString(Qt::ISODate));
+            }
+            query.addBindValue(fundId);
+            if (query.exec()) {
+                refreshFundTable(fundsModel);
+            }
+        }
+    });
+
+    tabs->addTab(fundsTab, "Funds");
+
+    // ====================== ACCOUNTS TAB ======================
+    QWidget* accountsTab = new QWidget;
+    QVBoxLayout* accountsL = new QVBoxLayout(accountsTab);
+
+    QTableView* accountsTable = new QTableView;
+    QStandardItemModel* accountsModel = new QStandardItemModel(this);
+    accountsModel->setHorizontalHeaderLabels({"ID", "Code", "Name", "Type", "Fund", "Archived", "Archived Date"});
+    accountsTable->setModel(accountsModel);
+
+    refreshAccountsTable(accountsModel);
+
+    accountsL->addWidget(accountsTable);
+
+    QHBoxLayout* accountsBtnL = new QHBoxLayout;
+    QPushButton* aAdd = new QPushButton("Add");
+    QPushButton* aEdit = new QPushButton("Edit");
+    QPushButton* aArchive = new QPushButton("Archive / Unarchive");
+    accountsBtnL->addWidget(aAdd);
+    accountsBtnL->addWidget(aEdit);
+    accountsBtnL->addWidget(aArchive);
+    accountsL->addLayout(accountsBtnL);
+
+    connect(aAdd, &QPushButton::clicked, this, [this, accountsModel]() { 
+        showAccountDialog(false, -1, accountsModel); 
+    });
+    connect(aEdit, &QPushButton::clicked, this, [this, accountsTable, accountsModel]() {
+        QModelIndex idx = accountsTable->currentIndex();
+        if (idx.isValid()) {
+            int accountId = accountsModel->item(idx.row(), 0)->text().toInt();
+            showAccountDialog(true, accountId, accountsModel);
+        }
+    });
+    connect(aArchive, &QPushButton::clicked, this, [this, accountsTable, accountsModel]() {
+        QModelIndex idx = accountsTable->currentIndex();
+        if (!idx.isValid()) return;
+
+        int accountId = accountsModel->item(idx.row(), 0)->text().toInt();
+        bool isArchived = accountsModel->item(idx.row(), 5)->text() == "Yes";
+
+        QString msg = isArchived ? "Unarchive this account?" : "Archive this account?";
+        if (QMessageBox::question(this, "Archive Account", msg) == QMessageBox::Yes) {
+            QSqlQuery query(dbManager->db);
+            if (isArchived) {
+                query.prepare("UPDATE accounts SET archived = 0, archived_date = NULL WHERE id = ?");
+            } else {
+                query.prepare("UPDATE accounts SET archived = 1, archived_date = ? WHERE id = ?");
+                query.addBindValue(QDate::currentDate().toString(Qt::ISODate));
+            }
+            query.addBindValue(accountId);
+            if (query.exec()) {
+                refreshAccountsTable(accountsModel);
+            }
+        }
+    });
+
+    tabs->addTab(accountsTab, "Accounts");
+
+    // ====================== NATURAL CLASSES TAB ======================
+    QWidget* naturalTab = new QWidget;
+    QVBoxLayout* naturalL = new QVBoxLayout(naturalTab);
+
+    QTableView* naturalTable = new QTableView;
+    QStandardItemModel* naturalModel = new QStandardItemModel(this);
+    naturalModel->setHorizontalHeaderLabels({"ID", "Name", "Archived", "Archived Date"});
+    naturalTable->setModel(naturalModel);
+
+    refreshSimpleLookupTable(naturalModel, "natural_classes");
+
+    naturalL->addWidget(naturalTable);
+
+    QHBoxLayout* naturalBtnL = new QHBoxLayout;
+    QPushButton* nAdd = new QPushButton("Add");
+    QPushButton* nEdit = new QPushButton("Edit");
+    QPushButton* nArchive = new QPushButton("Archive / Unarchive");
+    naturalBtnL->addWidget(nAdd);
+    naturalBtnL->addWidget(nEdit);
+    naturalBtnL->addWidget(nArchive);
+    naturalL->addLayout(naturalBtnL);
+
+    connect(nAdd, &QPushButton::clicked, this, [this, naturalModel]() {
+        showSimpleLookupDialog("Add Natural Class", naturalModel, "natural_classes");
+    });
+    connect(nEdit, &QPushButton::clicked, this, [this, naturalTable, naturalModel]() {
+        QModelIndex idx = naturalTable->currentIndex();
+        if (idx.isValid()) {
+            int id = naturalModel->item(idx.row(), 0)->text().toInt();
+            showSimpleLookupDialog("Edit Natural Class", naturalModel, "natural_classes", id);
+        }
+    });
+    connect(nArchive, &QPushButton::clicked, this, [this, naturalTable, naturalModel]() {
+        QModelIndex idx = naturalTable->currentIndex();
+        if (!idx.isValid()) return;
+
+        int id = naturalModel->item(idx.row(), 0)->text().toInt();
+        bool isArchived = naturalModel->item(idx.row(), 2)->text() == "Yes";
+
+        QString msg = isArchived ? "Unarchive this natural class?" : "Archive this natural class?";
+        if (QMessageBox::question(this, "Archive", msg) == QMessageBox::Yes) {
+            QSqlQuery query(dbManager->db);
+            if (isArchived) {
+                query.prepare("UPDATE natural_classes SET archived = 0, archived_date = NULL WHERE id = ?");
+            } else {
+                query.prepare("UPDATE natural_classes SET archived = 1, archived_date = ? WHERE id = ?");
+                query.addBindValue(QDate::currentDate().toString(Qt::ISODate));
+            }
+            query.addBindValue(id);
+            if (query.exec()) {
+                refreshSimpleLookupTable(naturalModel, "natural_classes");
+            }
+        }
+    });
+
+    tabs->addTab(naturalTab, "Natural Classes");
+
+    // ====================== FUNCTIONAL CLASSES TAB ======================
+    QWidget* functionalTab = new QWidget;
+    QVBoxLayout* functionalL = new QVBoxLayout(functionalTab);
+
+    QTableView* functionalTable = new QTableView;
+    QStandardItemModel* functionalModel = new QStandardItemModel(this);
+    functionalModel->setHorizontalHeaderLabels({"ID", "Name", "Archived", "Archived Date"});
+    functionalTable->setModel(functionalModel);
+
+    refreshSimpleLookupTable(functionalModel, "functional_classes");
+
+    functionalL->addWidget(functionalTable);
+
+    QHBoxLayout* functionalBtnL = new QHBoxLayout;
+    QPushButton* fnAdd = new QPushButton("Add");
+    QPushButton* fnEdit = new QPushButton("Edit");
+    QPushButton* fnArchive = new QPushButton("Archive / Unarchive");
+    functionalBtnL->addWidget(fnAdd);
+    functionalBtnL->addWidget(fnEdit);
+    functionalBtnL->addWidget(fnArchive);
+    functionalL->addLayout(functionalBtnL);
+
+    connect(fnAdd, &QPushButton::clicked, this, [this, functionalModel]() {
+        showSimpleLookupDialog("Add Functional Class", functionalModel, "functional_classes");
+    });
+    connect(fnEdit, &QPushButton::clicked, this, [this, functionalTable, functionalModel]() {
+        QModelIndex idx = functionalTable->currentIndex();
+        if (idx.isValid()) {
+            int id = functionalModel->item(idx.row(), 0)->text().toInt();
+            showSimpleLookupDialog("Edit Functional Class", functionalModel, "functional_classes", id);
+        }
+    });
+    connect(fnArchive, &QPushButton::clicked, this, [this, functionalTable, functionalModel]() {
+        QModelIndex idx = functionalTable->currentIndex();
+        if (!idx.isValid()) return;
+
+        int id = functionalModel->item(idx.row(), 0)->text().toInt();
+        bool isArchived = functionalModel->item(idx.row(), 2)->text() == "Yes";
+
+        QString msg = isArchived ? "Unarchive this functional class?" : "Archive this functional class?";
+        if (QMessageBox::question(this, "Archive", msg) == QMessageBox::Yes) {
+            QSqlQuery query(dbManager->db);
+            if (isArchived) {
+                query.prepare("UPDATE functional_classes SET archived = 0, archived_date = NULL WHERE id = ?");
+            } else {
+                query.prepare("UPDATE functional_classes SET archived = 1, archived_date = ? WHERE id = ?");
+                query.addBindValue(QDate::currentDate().toString(Qt::ISODate));
+            }
+            query.addBindValue(id);
+            if (query.exec()) {
+                refreshSimpleLookupTable(functionalModel, "functional_classes");
+            }
+        }
+    });
+
+    tabs->addTab(functionalTab, "Functional Classes");
+
+    mainL->addWidget(tabs, 1);
+
+    stack->addWidget(page);   // Sequential add → index 4
+}
+
+void MainWindow::setupTransactionsPage() {
+    QWidget* page = new QWidget;
+    QVBoxLayout* mainLayout = new QVBoxLayout(page);
+    mainLayout->setContentsMargins(12, 12, 12, 12);
+    mainLayout->setSpacing(8);
+
+    QLabel* title = new QLabel("Transaction Ledger");
+    QFont titleFont = title->font();
+    titleFont.setPointSize(16);
+    titleFont.setBold(true);
+    title->setFont(titleFont);
+    mainLayout->addWidget(title);
+
+    // ====================== ACTION BUTTONS ======================
+    QHBoxLayout* actionLayout = new QHBoxLayout();
+    actionLayout->setSpacing(12);
+
+    QPushButton* newTxBtn = new QPushButton("➕ New Transaction");
+    newTxBtn->setMinimumHeight(50);
+    newTxBtn->setStyleSheet(R"(
+        QPushButton {
+            font-size: 16px;
+            font-weight: bold;
+            padding: 12px 24px;
+            background-color: #3498db;
+            color: white;
+            border: none;
+            border-radius: 6px;
+        }
+        QPushButton:hover {
+            background-color: #2980b9;
+        }
+        QPushButton:pressed {
+            background-color: #1f6da8;
+        }
+    )");
+
+    QPushButton* reconcileTxnBtn = new QPushButton("🔒 Reconcile");
+    reconcileTxnBtn->setMinimumHeight(50);
+    reconcileTxnBtn->setStyleSheet(R"(
+        QPushButton {
+            font-size: 15px;
+            padding: 12px 20px;
+            background-color: #2c3e50;
+            color: white;
+            border: none;
+            border-radius: 6px;
+        }
+        QPushButton:hover {
+            background-color: #34495e;
+        }
+    )");
+
+    actionLayout->addWidget(newTxBtn);
+    actionLayout->addWidget(reconcileTxnBtn);
+    actionLayout->addStretch();   // pushes buttons to the left
+
+    mainLayout->addLayout(actionLayout);
+
+    connect(newTxBtn, &QPushButton::clicked, this, &MainWindow::onNewTransaction);
+    // connect(reconcileTxnBtn, &QPushButton::clicked, this, &MainWindow::loadTransactions);  // uncomment when ready
+    
+    txListTable = new QTableWidget(0, 6);
+    txListTable->setHorizontalHeaderLabels({
+        "ID", "Date", "Reference", "Description", "Total", "Status"
+    });
+    txListTable->setAlternatingRowColors(true);
+    txListTable->setSelectionBehavior(QAbstractItemView::SelectRows);
+    txListTable->setSelectionMode(QAbstractItemView::SingleSelection);
+    txListTable->horizontalHeader()->setStretchLastSection(true);
+
+    mainLayout->addWidget(txListTable, 2);
+
+    // Double-click to edit/view
+    connect(txListTable, &QTableWidget::cellDoubleClicked, this, [this](int row, int col) {
+        if (row >= 0) {
+            int txId = txListTable->item(row, 0)->data(Qt::UserRole).toInt();
+            if (txId > 0) {
+                editTransaction(txId);
+            }
+        }
+    });
+
+    QGroupBox* detailsGroup = new QGroupBox("Transaction Details");
+    QVBoxLayout* detailsVL = new QVBoxLayout(detailsGroup);
+    txDetailsLabel = new QLabel("Select a transaction to view line items");
+    txDetailsLabel->setWordWrap(true);
+    detailsVL->addWidget(txDetailsLabel);
+
+    txDetailsTable = new QTableWidget(0, 6);
+    txDetailsTable->setHorizontalHeaderLabels({
+        "Fund", "Account", "Amount", "Natural Class", "Functional Class", "Memo"
+    });
+    detailsVL->addWidget(txDetailsTable);
+
+    mainLayout->addWidget(detailsGroup, 1);
+
+    connect(txListTable, &QTableWidget::itemSelectionChanged, this, [this]() {
+        int row = txListTable->currentRow();
+        if (row >= 0) onTransactionSelected(row);
+    });
+
+    // Make main ledger read-only
+    txListTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
+
+    // Make details table read-only
+    if (txDetailsTable) {
+        txDetailsTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    }    
+
+    stack->addWidget(page);   // No hardcoded index
+}
+
+void MainWindow::loadTransactions() {
+    if (!txListTable) return;
+    txListTable->setRowCount(0);
+
+    QSqlQuery q(dbManager->db);
+    q.exec(R"(
+        SELECT 
+            id, 
+            date, 
+            reference, 
+            description, 
+            total_amount,
+            cleared,
+            reconciled,
+            CASE 
+                WHEN reconciled = 1 THEN 'R - Reconciled'
+                WHEN cleared = 1 THEN 'C - Cleared'
+                ELSE 'Pending' 
+            END as status
+        FROM transactions 
+        ORDER BY date DESC, id DESC
+    )");
+
+    bool isEven = true;
+
+    while (q.next()) {
+        int row = txListTable->rowCount();
+        txListTable->insertRow(row);
+
+        qlonglong txId = q.value("id").toLongLong();
+        bool cleared    = q.value("cleared").toInt() != 0;
+        bool reconciled = q.value("reconciled").toInt() != 0;
+
+        // Populate cells
+        QTableWidgetItem* idItem = new QTableWidgetItem(QString::number(txId));
+        idItem->setData(Qt::UserRole, txId);
+        txListTable->setItem(row, 0, idItem);
+
+        txListTable->setItem(row, 1, new QTableWidgetItem(q.value("date").toString()));
+        txListTable->setItem(row, 2, new QTableWidgetItem(q.value("reference").toString()));
+        txListTable->setItem(row, 3, new QTableWidgetItem(q.value("description").toString()));
+
+        double total = q.value("total_amount").toDouble();
+        QTableWidgetItem* totalItem = new QTableWidgetItem(QString::number(total, 'f', 2));
+        totalItem->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
+        txListTable->setItem(row, 4, totalItem);
+
+        txListTable->setItem(row, 5, new QTableWidgetItem(q.value("status").toString()));
+
+    // ====================== THEME-AWARE ROW COLORING ======================
+        QColor rowColor;
+        if (reconciled) {
+            rowColor = colorReconciled;
+        } else if (cleared) {
+            rowColor = colorCleared;
+        } else {
+            rowColor = isEven ? colorNormalEven : colorNormalOdd;
+        }
+
+        if (rowColor.isValid()) {
+            for (int col = 0; col < txListTable->columnCount(); ++col) {
+                if (QTableWidgetItem* item = txListTable->item(row, col)) {
+                    item->setBackground(rowColor);
+                }
+            }
+        }
+
+        isEven = !isEven;   // Toggle for next normal row
+    }
+
+    txListTable->resizeColumnsToContents();
+    txListTable->setColumnWidth(0, 60);   // ID
+    txListTable->setColumnWidth(1, 110);  // Date
+    txListTable->setColumnWidth(2, 130);  // Reference
+    txListTable->setColumnWidth(4, 100);  // Total
+}
+
+void MainWindow::editTransaction(int txId) {
+    // TODO: Load the transaction data and open dialog in edit mode
+    // For now, we'll call the existing dialog and enhance it later
+    onNewTransaction(txId);   // Temporary - we'll improve this next
 }
 
 void MainWindow::refreshFundsPage() {}

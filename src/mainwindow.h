@@ -16,7 +16,7 @@ public:
     ~MainWindow();
 
 private slots:
-    void onNewTransaction();
+    void onNewTransaction(int editTxId);
     void onManageFunds();
     void onManageLookups();
     void onManageAccounts();
@@ -37,9 +37,17 @@ private:
     void setupTransactionsPage();
     void loadTransactions();
     void onTransactionSelected(int row);
-    // Fund Balances
     void setupFundsBalancesPage();
     void loadFundBalances();
+    void setupManageLookupsPage();
+    void editTransaction(int txId);
+    // Page indices - single source of truth
+    static const int PAGE_DASHBOARD = 0;
+    static const int PAGE_LEDGER    = 1;
+    static const int PAGE_FUNDS     = 2;
+    static const int PAGE_REPORTS   = 3;
+    static const int PAGE_SETUP     = 4;
+
     DbManager* dbManager;
 
     QStackedWidget* stack;
@@ -62,4 +70,10 @@ private:
     QLabel* totalWODRLabel = nullptr;
     QLabel* totalWDRLabel = nullptr;
     QLabel* grandTotalLabel = nullptr;
+
+    // Theme-able colors for transaction rows
+    QColor colorNormalEven;
+    QColor colorNormalOdd;
+    QColor colorCleared;
+    QColor colorReconciled;
 };

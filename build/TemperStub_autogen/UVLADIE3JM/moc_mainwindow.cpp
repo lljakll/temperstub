@@ -42,6 +42,7 @@ template <> constexpr inline auto MainWindow::qt_create_metaobjectdata<qt_meta_t
         "MainWindow",
         "onNewTransaction",
         "",
+        "editTxId",
         "onManageFunds",
         "onManageLookups",
         "onManageAccounts",
@@ -51,16 +52,18 @@ template <> constexpr inline auto MainWindow::qt_create_metaobjectdata<qt_meta_t
 
     QtMocHelpers::UintData qt_methods {
         // Slot 'onNewTransaction'
-        QtMocHelpers::SlotData<void()>(1, 2, QMC::AccessPrivate, QMetaType::Void),
+        QtMocHelpers::SlotData<void(int)>(1, 2, QMC::AccessPrivate, QMetaType::Void, {{
+            { QMetaType::Int, 3 },
+        }}),
         // Slot 'onManageFunds'
-        QtMocHelpers::SlotData<void()>(3, 2, QMC::AccessPrivate, QMetaType::Void),
-        // Slot 'onManageLookups'
         QtMocHelpers::SlotData<void()>(4, 2, QMC::AccessPrivate, QMetaType::Void),
-        // Slot 'onManageAccounts'
+        // Slot 'onManageLookups'
         QtMocHelpers::SlotData<void()>(5, 2, QMC::AccessPrivate, QMetaType::Void),
+        // Slot 'onManageAccounts'
+        QtMocHelpers::SlotData<void()>(6, 2, QMC::AccessPrivate, QMetaType::Void),
         // Slot 'switchPage'
-        QtMocHelpers::SlotData<void(int)>(6, 2, QMC::AccessPrivate, QMetaType::Void, {{
-            { QMetaType::Int, 7 },
+        QtMocHelpers::SlotData<void(int)>(7, 2, QMC::AccessPrivate, QMetaType::Void, {{
+            { QMetaType::Int, 8 },
         }}),
     };
     QtMocHelpers::UintData qt_properties {
@@ -85,7 +88,7 @@ void MainWindow::qt_static_metacall(QObject *_o, QMetaObject::Call _c, int _id, 
     auto *_t = static_cast<MainWindow *>(_o);
     if (_c == QMetaObject::InvokeMetaMethod) {
         switch (_id) {
-        case 0: _t->onNewTransaction(); break;
+        case 0: _t->onNewTransaction((*reinterpret_cast< std::add_pointer_t<int>>(_a[1]))); break;
         case 1: _t->onManageFunds(); break;
         case 2: _t->onManageLookups(); break;
         case 3: _t->onManageAccounts(); break;
