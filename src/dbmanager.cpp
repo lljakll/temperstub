@@ -168,6 +168,31 @@ double DbManager::getWDRTotal() const {
     return (query.exec() && query.next()) ? query.value(0).toDouble() : 0.0;
 }
 
+// Returns a map of fundId -> balance using proper accounting logic
+// (Revenue credits increase fund balance, Expense debits decrease it)
+QMap<int, double> DbManager::getAllFundBalances() const {
+    QMap<int, double> balances;
+    QSqlQuery query(db);
+    query.exec(R"(
+        SELECT 
+            f.id,
+            COALESCE(
+                SUM(CASE 
+                    WHEN a.type = 'Revenue' THEN -tl.amount
+                    WHEN a.type = 'Expense' THEN  tl.amount
+                    ELSE tl.amount
+                END), 0) as balance
+        FROM funds f
+        LEFT JOIN transaction_lines tl ON tl.fund_id = f.id
+        LEFT JOIN accounts a ON tl.account_id = a.id
+        GROUP BY f.id
+    )");
+    while (query.next()) {
+        balances[query.value(0).toInt()] = query.value(1).toDouble();
+    }
+    return balances;
+}
+
 QString DbManager::getFundName(int fundId) const {
     QSqlQuery query(db);
     query.prepare("SELECT name FROM funds WHERE id = ?");

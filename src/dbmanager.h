@@ -4,6 +4,7 @@
 #include <QSqlQuery>
 #include <QDate>
 #include <QList>
+#include <QMap>
 
 struct Fund {
     int id = 0;
@@ -64,6 +65,7 @@ public:
     bool saveAttachment(int transactionId, const QString& sourceFilePath);
     QString getAttachmentPath(int transactionId) const;
     bool openAttachment(int transactionId) const;
+    QMap<int, double> getAllFundBalances() const;   // NEW: efficient balance lookup
 
 private:
     void createTables();

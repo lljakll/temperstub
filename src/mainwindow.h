@@ -26,6 +26,7 @@ private:
     void setupUI();
     void refreshAll();
     void populateFundsCombo(QComboBox* combo);
+    
     QString getFundName(int fundId) const;
     void refreshFundsPage();
     void showFundDialog(bool isEdit = false, int fundId = -1, QStandardItemModel* model = nullptr);
@@ -41,6 +42,20 @@ private:
     void loadFundBalances();
     void setupManageLookupsPage();
     void editTransaction(int txId);
+
+    // Lookup tab creation helpers (reduces duplication)
+    QWidget* createFundsTab(QStandardItemModel*& model);
+    QWidget* createAccountsTab(QStandardItemModel*& model);
+    QWidget* createSimpleLookupTab(const QString& title, const QString& tableName, QStandardItemModel*& model);
+
+    // Extracted helper methods for transaction dialog
+    bool validateTransactionLines(QTableWidget* txTable, double& outDebits, double& outCredits);
+    bool saveTransaction(const QDate& date, const QString& description, const QString& payee,
+                         const QString& reference, const QString& approvedBy, const QString& memo,
+                         const QString& status, const QString& attachmentPath,
+                         QTableWidget* txTable, qlonglong& outTxId);
+    void addTransactionLine(QTableWidget* txTable);
+
     // Page indices - single source of truth
     static const int PAGE_DASHBOARD = 0;
     static const int PAGE_LEDGER    = 1;

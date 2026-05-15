@@ -1,0 +1,116 @@
+jak@kdesktop01:~/git_repos/TemperStub/build$ rm -vrf !(*.db) && cmake .. -DCMAKE_BUILD_TYPE=Release && cmake --build . --config Release -j$(nproc) &&  ./TemperStub
+removed 'CMakeCache.txt'
+removed 'CMakeFiles/Makefile2'
+removed 'CMakeFiles/CMakeRuleHashes.txt'
+removed 'CMakeFiles/TemperStub_autogen_timestamp_deps.dir/compiler_depend.make'
+removed 'CMakeFiles/TemperStub_autogen_timestamp_deps.dir/DependInfo.cmake'
+removed 'CMakeFiles/TemperStub_autogen_timestamp_deps.dir/cmake_clean.cmake'
+removed 'CMakeFiles/TemperStub_autogen_timestamp_deps.dir/build.make'
+removed 'CMakeFiles/TemperStub_autogen_timestamp_deps.dir/compiler_depend.ts'
+removed 'CMakeFiles/TemperStub_autogen_timestamp_deps.dir/progress.make'
+removed directory 'CMakeFiles/TemperStub_autogen_timestamp_deps.dir'
+removed 'CMakeFiles/Makefile.cmake'
+removed 'CMakeFiles/3.31.6/CMakeSystem.cmake'
+removed 'CMakeFiles/3.31.6/CMakeCXXCompiler.cmake'
+removed 'CMakeFiles/3.31.6/CompilerIdCXX/CMakeCXXCompilerId.cpp'
+removed directory 'CMakeFiles/3.31.6/CompilerIdCXX/tmp'
+removed 'CMakeFiles/3.31.6/CompilerIdCXX/a.out'
+removed directory 'CMakeFiles/3.31.6/CompilerIdCXX'
+removed 'CMakeFiles/3.31.6/CMakeDetermineCompilerABI_CXX.bin'
+removed directory 'CMakeFiles/3.31.6'
+removed 'CMakeFiles/progress.marks'
+removed 'CMakeFiles/cmake.check_cache'
+removed 'CMakeFiles/TemperStub_autogen.dir/compiler_depend.make'
+removed 'CMakeFiles/TemperStub_autogen.dir/AutogenUsed.txt'
+removed 'CMakeFiles/TemperStub_autogen.dir/DependInfo.cmake'
+removed 'CMakeFiles/TemperStub_autogen.dir/cmake_clean.cmake'
+removed 'CMakeFiles/TemperStub_autogen.dir/AutogenInfo.json'
+removed 'CMakeFiles/TemperStub_autogen.dir/ParseCache.txt'
+removed 'CMakeFiles/TemperStub_autogen.dir/build.make'
+removed 'CMakeFiles/TemperStub_autogen.dir/compiler_depend.internal'
+removed 'CMakeFiles/TemperStub_autogen.dir/compiler_depend.ts'
+removed 'CMakeFiles/TemperStub_autogen.dir/progress.make'
+removed directory 'CMakeFiles/TemperStub_autogen.dir'
+removed directory 'CMakeFiles/pkgRedirects'
+removed 'CMakeFiles/TemperStub.dir/compiler_depend.make'
+removed 'CMakeFiles/TemperStub.dir/depend.make'
+removed 'CMakeFiles/TemperStub.dir/TemperStub_autogen/mocs_compilation.cpp.o'
+removed 'CMakeFiles/TemperStub.dir/TemperStub_autogen/mocs_compilation.cpp.o.d'
+removed directory 'CMakeFiles/TemperStub.dir/TemperStub_autogen'
+removed 'CMakeFiles/TemperStub.dir/DependInfo.cmake'
+removed 'CMakeFiles/TemperStub.dir/cmake_clean.cmake'
+removed 'CMakeFiles/TemperStub.dir/src/dbmanager.cpp.o.d'
+removed 'CMakeFiles/TemperStub.dir/src/mainwindow.cpp.o.d'
+removed 'CMakeFiles/TemperStub.dir/src/dbmanager.cpp.o'
+removed 'CMakeFiles/TemperStub.dir/src/main.cpp.o.d'
+removed 'CMakeFiles/TemperStub.dir/src/mainwindow.cpp.o'
+removed 'CMakeFiles/TemperStub.dir/src/main.cpp.o'
+removed directory 'CMakeFiles/TemperStub.dir/src'
+removed 'CMakeFiles/TemperStub.dir/build.make'
+removed 'CMakeFiles/TemperStub.dir/link.txt'
+removed 'CMakeFiles/TemperStub.dir/compiler_depend.internal'
+removed 'CMakeFiles/TemperStub.dir/link.d'
+removed 'CMakeFiles/TemperStub.dir/compiler_depend.ts'
+removed 'CMakeFiles/TemperStub.dir/progress.make'
+removed 'CMakeFiles/TemperStub.dir/flags.make'
+removed directory 'CMakeFiles/TemperStub.dir'
+removed 'CMakeFiles/CMakeConfigureLog.yaml'
+removed 'CMakeFiles/CMakeDirectoryInformation.cmake'
+removed 'CMakeFiles/TargetDirectories.txt'
+removed directory 'CMakeFiles'
+removed 'cmake_install.cmake'
+removed 'Makefile'
+removed 'TemperStub'
+removed 'TemperStub_autogen/mocs_compilation.cpp'
+removed 'TemperStub_autogen/moc_predefs.h'
+removed 'TemperStub_autogen/UVLADIE3JM/moc_dbmanager.cpp.d'
+removed 'TemperStub_autogen/UVLADIE3JM/moc_mainwindow.cpp.d'
+removed 'TemperStub_autogen/UVLADIE3JM/moc_mainwindow.cpp'
+removed 'TemperStub_autogen/UVLADIE3JM/moc_dbmanager.cpp'
+removed directory 'TemperStub_autogen/UVLADIE3JM'
+removed directory 'TemperStub_autogen/include'
+removed 'TemperStub_autogen/timestamp'
+removed 'TemperStub_autogen/deps'
+removed directory 'TemperStub_autogen'
+-- The CXX compiler identification is GNU 15.2.0
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Check for working CXX compiler: /usr/bin/c++ - skipped
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+-- Performing Test CMAKE_HAVE_LIBC_PTHREAD
+-- Performing Test CMAKE_HAVE_LIBC_PTHREAD - Success
+-- Found Threads: TRUE
+-- Performing Test HAVE_STDATOMIC
+-- Performing Test HAVE_STDATOMIC - Success
+-- Found WrapAtomic: TRUE
+-- Found OpenGL: /usr/lib/x86_64-linux-gnu/libOpenGL.so
+-- Found WrapOpenGL: TRUE
+-- Found WrapVulkanHeaders: /usr/include
+-- Configuring done (0.5s)
+-- Generating done (0.0s)
+-- Build files have been written to: /home/jak/git_repos/TemperStub/build
+[  0%] Built target TemperStub_autogen_timestamp_deps
+[ 14%] Automatic MOC and UIC for target TemperStub
+[ 14%] Built target TemperStub_autogen
+[ 28%] Building CXX object CMakeFiles/TemperStub.dir/src/mainwindow.cpp.o
+[ 42%] Building CXX object CMakeFiles/TemperStub.dir/src/main.cpp.o
+[ 57%] Building CXX object CMakeFiles/TemperStub.dir/src/dbmanager.cpp.o
+[ 71%] Building CXX object CMakeFiles/TemperStub.dir/TemperStub_autogen/mocs_compilation.cpp.o
+[ 85%] Linking CXX executable TemperStub
+/usr/bin/ld: CMakeFiles/TemperStub.dir/src/main.cpp.o: in function `main.cold':
+main.cpp:(.text.unlikely+0xa): undefined reference to `MainWindow::~MainWindow()'
+/usr/bin/ld: CMakeFiles/TemperStub.dir/src/main.cpp.o: in function `main':
+main.cpp:(.text.startup+0x44): undefined reference to `MainWindow::MainWindow(QWidget*)'
+/usr/bin/ld: main.cpp:(.text.startup+0x60): undefined reference to `MainWindow::~MainWindow()'
+/usr/bin/ld: CMakeFiles/TemperStub.dir/TemperStub_autogen/mocs_compilation.cpp.o: in function `QtPrivate::QMetaTypeForType<MainWindow>::getDefaultCtr()::{lambda(QtPrivate::QMetaTypeInterface const*, void*)#1}::_FUN(QtPrivate::QMetaTypeInterface const*, void*)':
+mocs_compilation.cpp:(.text._ZZN9QtPrivate16QMetaTypeForTypeI10MainWindowE13getDefaultCtrEvENUlPKNS_18QMetaTypeInterfaceEPvE_4_FUNES5_S6_[_ZZN9QtPrivate16QMetaTypeForTypeI10MainWindowE13getDefaultCtrEvENUlPKNS_18QMetaTypeInterfaceEPvE_4_FUNES5_S6_]+0xa): undefined reference to `MainWindow::MainWindow(QWidget*)'
+/usr/bin/ld: CMakeFiles/TemperStub.dir/TemperStub_autogen/mocs_compilation.cpp.o:(.data.rel.ro._ZTV10MainWindow[_ZTV10MainWindow]+0x28): undefined reference to `MainWindow::~MainWindow()'
+/usr/bin/ld: CMakeFiles/TemperStub.dir/TemperStub_autogen/mocs_compilation.cpp.o:(.data.rel.ro._ZTV10MainWindow[_ZTV10MainWindow]+0x30): undefined reference to `MainWindow::~MainWindow()'
+/usr/bin/ld: CMakeFiles/TemperStub.dir/TemperStub_autogen/mocs_compilation.cpp.o:(.data.rel.ro._ZTV10MainWindow[_ZTV10MainWindow]+0x1c8): undefined reference to `non-virtual thunk to MainWindow::~MainWindow()'
+/usr/bin/ld: CMakeFiles/TemperStub.dir/TemperStub_autogen/mocs_compilation.cpp.o:(.data.rel.ro._ZTV10MainWindow[_ZTV10MainWindow]+0x1d0): undefined reference to `non-virtual thunk to MainWindow::~MainWindow()'
+collect2: error: ld returned 1 exit status
+gmake[2]: *** [CMakeFiles/TemperStub.dir/build.make:162: TemperStub] Error 1
+gmake[1]: *** [CMakeFiles/Makefile2:90: CMakeFiles/TemperStub.dir/all] Error 2
+gmake: *** [Makefile:91: all] Error 2
+jak@kdesktop01:~/git_repos/TemperStub/build$ 
