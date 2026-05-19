@@ -494,20 +494,18 @@ void MainWindow::onNewTransaction(int editTxId /* = 0 */) {
             double debitAmt = txTable->item(r, 7) ? txTable->item(r, 7)->text().toDouble() : 0.0;
             double creditAmt = txTable->item(r, 8) ? txTable->item(r, 8)->text().toDouble() : 0.0;
             QString notes = txTable->item(r, 6) ? txTable->item(r, 6)->text().trimmed() : "";
-
-            double finalAmount = debitAmt - creditAmt;
-
             QSqlQuery line(dbManager->db);
             line.prepare(R"(
                 INSERT INTO transaction_lines 
-                (transaction_id, account_id, fund_id, amount, natural_class, functional_class, notes)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                (transaction_id, account_id, fund_id, debit, credit, natural_class, functional_class, notes)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             )");
 
             line.addBindValue(txId);
             line.addBindValue(a.id);
             line.addBindValue(fundId);
-            line.addBindValue(finalAmount);
+            line.addBindValue(debitAmt);
+            line.addBindValue(creditAmt);
             line.addBindValue(nat);
             line.addBindValue(func);
             line.addBindValue(notes);
@@ -610,6 +608,8 @@ void MainWindow::onManageLookups() {
             query.addBindValue(fundId);
             if (query.exec()) {
                 refreshFundTable(fundsModel);
+                dbManager->refreshLookupCache();
+                qDebug() << "[CACHE] refreshLookupCache() called after fund archive/unarchive";
             }
         }
     });
@@ -670,6 +670,8 @@ void MainWindow::onManageLookups() {
             query.addBindValue(accountId);
             if (query.exec()) {
                 refreshAccountsTable(accountsModel);
+                dbManager->refreshLookupCache();
+                qDebug() << "[CACHE] refreshLookupCache() called after account archive/unarchive";
             }
         }
     });
@@ -727,6 +729,8 @@ void MainWindow::onManageLookups() {
             query.addBindValue(id);
             if (query.exec()) {
                 refreshSimpleLookupTable(naturalModel, "natural_classes");
+                dbManager->refreshLookupCache();
+                qDebug() << "[CACHE] refreshLookupCache() called after natural class archive/unarchive";
             }
         }
     });
@@ -784,6 +788,8 @@ void MainWindow::onManageLookups() {
             query.addBindValue(id);
             if (query.exec()) {
                 refreshSimpleLookupTable(functionalModel, "functional_classes");
+                dbManager->refreshLookupCache();
+                qDebug() << "[CACHE] refreshLookupCache() called after functional class archive/unarchive";
             }
         }
     });
@@ -914,6 +920,8 @@ void MainWindow::showFundDialog(bool isEdit, int fundId, QStandardItemModel* mod
 
         if (query.exec()) {
             refreshFundTable(model);
+            dbManager->refreshLookupCache();
+            qDebug() << "[CACHE] refreshLookupCache() called after fund save";
         } else {
             QMessageBox::critical(this, "Error", "Save failed.");
         }
@@ -1055,6 +1063,8 @@ void MainWindow::showAccountDialog(bool isEdit, int accountId, QStandardItemMode
 
         if (query.exec()) {
             refreshAccountsTable(model);
+            dbManager->refreshLookupCache();
+            qDebug() << "[CACHE] refreshLookupCache() called after account save";
         } else {
             QMessageBox::critical(this, "Error", "Save failed.");
         }
@@ -1146,6 +1156,8 @@ void MainWindow::showSimpleLookupDialog(const QString& title, QStandardItemModel
         }
         if (query.exec()) {
             refreshSimpleLookupTable(model, tableName);
+            dbManager->refreshLookupCache();
+            qDebug() << "[CACHE] refreshLookupCache() called after simple lookup save";
         }
     }
 }
@@ -1199,7 +1211,8 @@ void MainWindow::onTransactionSelected(int row) {
         SELECT 
             COALESCE(f.name, '(Asset/Liability - No Fund)') as fund_name,
             COALESCE(a.name, '(Unknown Account)') as account_name,
-            tl.amount,
+            tl.debit,
+            tl.credit,
             COALESCE(tl.natural_class, '') as natural_class,
             COALESCE(tl.functional_class, '') as functional_class,
             COALESCE(tl.notes, '') as notes,
@@ -1220,21 +1233,23 @@ void MainWindow::onTransactionSelected(int row) {
         txDetailsTable->setItem(r, 0, new QTableWidgetItem(q.value("fund_name").toString()));
         txDetailsTable->setItem(r, 1, new QTableWidgetItem(q.value("account_name").toString()));
 
-        double rawAmt = q.value("amount").toDouble();
-        double displayAmt = rawAmt;
-
-        // Flip sign for better readability: positive = inflow to fund, negative = outflow
         QString accType = q.value("account_type").toString();
-        if (accType == "Revenue") displayAmt = -rawAmt;
-        else if (accType == "Expense") displayAmt = rawAmt;
+        txDetailsTable->setItem(r, 2, new QTableWidgetItem(accType));
 
-        QTableWidgetItem* amtItem = new QTableWidgetItem(QString::number(displayAmt, 'f', 2));
-        amtItem->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
-        txDetailsTable->setItem(r, 2, amtItem);
+        double debit = q.value("debit").toDouble();
+        double credit = q.value("credit").toDouble();
 
-        txDetailsTable->setItem(r, 3, new QTableWidgetItem(q.value("natural_class").toString()));
-        txDetailsTable->setItem(r, 4, new QTableWidgetItem(q.value("functional_class").toString()));
-        txDetailsTable->setItem(r, 5, new QTableWidgetItem(q.value("notes").toString()));
+        QTableWidgetItem* debitItem = new QTableWidgetItem(debit > 0 ? QString::number(debit, 'f', 2) : "");
+        debitItem->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
+        txDetailsTable->setItem(r, 3, debitItem);
+
+        QTableWidgetItem* creditItem = new QTableWidgetItem(credit > 0 ? QString::number(credit, 'f', 2) : "");
+        creditItem->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
+        txDetailsTable->setItem(r, 4, creditItem);
+
+        txDetailsTable->setItem(r, 5, new QTableWidgetItem(q.value("natural_class").toString()));
+        txDetailsTable->setItem(r, 6, new QTableWidgetItem(q.value("functional_class").toString()));
+        txDetailsTable->setItem(r, 7, new QTableWidgetItem(q.value("notes").toString()));
     }
 
     txDetailsTable->resizeColumnsToContents();
@@ -1292,9 +1307,9 @@ void MainWindow::loadFundBalances() {
             f.restriction_type,
             COALESCE(
                 SUM(CASE 
-                    WHEN a.type = 'Revenue' THEN -tl.amount   -- Credit to revenue increases fund
-                    WHEN a.type = 'Expense' THEN  tl.amount   -- Debit to expense decreases fund
-                    ELSE tl.amount
+                    WHEN a.type = 'Revenue' THEN tl.credit
+                    WHEN a.type = 'Expense' THEN -tl.debit
+                    ELSE 0
                 END), 0) as balance
         FROM funds f
         LEFT JOIN transaction_lines tl ON tl.fund_id = f.id
@@ -1411,6 +1426,8 @@ void MainWindow::setupManageLookupsPage() {
             query.addBindValue(fundId);
             if (query.exec()) {
                 refreshFundTable(fundsModel);
+                dbManager->refreshLookupCache();
+                qDebug() << "[CACHE] refreshLookupCache() called after fund archive/unarchive";
             }
         }
     });
@@ -1468,6 +1485,8 @@ void MainWindow::setupManageLookupsPage() {
             query.addBindValue(accountId);
             if (query.exec()) {
                 refreshAccountsTable(accountsModel);
+                dbManager->refreshLookupCache();
+                qDebug() << "[CACHE] refreshLookupCache() called after account archive/unarchive";
             }
         }
     });
@@ -1525,6 +1544,8 @@ void MainWindow::setupManageLookupsPage() {
             query.addBindValue(id);
             if (query.exec()) {
                 refreshSimpleLookupTable(naturalModel, "natural_classes");
+                dbManager->refreshLookupCache();
+                qDebug() << "[CACHE] refreshLookupCache() called after natural class archive/unarchive";
             }
         }
     });
@@ -1582,6 +1603,8 @@ void MainWindow::setupManageLookupsPage() {
             query.addBindValue(id);
             if (query.exec()) {
                 refreshSimpleLookupTable(functionalModel, "functional_classes");
+                dbManager->refreshLookupCache();
+                qDebug() << "[CACHE] refreshLookupCache() called after functional class archive/unarchive";
             }
         }
     });
@@ -1682,9 +1705,9 @@ void MainWindow::setupTransactionsPage() {
     txDetailsLabel->setWordWrap(true);
     detailsVL->addWidget(txDetailsLabel);
 
-    txDetailsTable = new QTableWidget(0, 6);
+    txDetailsTable = new QTableWidget(0, 8);
     txDetailsTable->setHorizontalHeaderLabels({
-        "Fund", "Account", "Amount", "Natural Class", "Functional Class", "Memo"
+        "Fund", "Account", "Type", "Debit", "Credit", "Natural Class", "Functional Class", "Memo"
     });
     detailsVL->addWidget(txDetailsTable);
 

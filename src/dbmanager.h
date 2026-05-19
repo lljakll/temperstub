@@ -67,7 +67,17 @@ public:
     bool openAttachment(int transactionId) const;
     QMap<int, double> getAllFundBalances() const;   // NEW: efficient balance lookup
 
+    void refreshLookupCache();                    // NEW: refresh cached lookups
+    void seedTestTransactions();                  // Test data generator (comment out after use)
+
 private:
     void createTables();
     void seedDefaultLookups();
+
+    // Simple lookup cache
+    mutable QList<Fund>         cachedFunds;
+    mutable QList<Account>      cachedAccounts;
+    mutable QList<SimpleLookup> cachedNatural;
+    mutable QList<SimpleLookup> cachedFunctional;
+    bool cacheValid = false;
 };
